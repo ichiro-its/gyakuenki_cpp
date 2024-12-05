@@ -115,8 +115,11 @@ const cv::Point & get_projection_pixels(const DetectedObject & detected_object, 
 double get_height_offset(const std::string & label, int object_type)
 {
   if (label == "ball") {
-    return 0.153  // Diameter of the ball
+    return 0.153 / 2  // Radius of the ball
   }
 
+  // Other objects are at the ground
   return 0.0;
+}
+
 }  // namespace gyakuenki_cpp::utils
