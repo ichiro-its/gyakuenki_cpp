@@ -25,13 +25,11 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-#include <geometry_msgs/msg/quaternion.hpp>
 #include <memory>
-#include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include "keisan/geometry/point_3.hpp"
-#include "keisan/matrix.hpp"
+#include "gyakuenki_cpp/utils/utils.hpp"
+#include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 
 namespace gyakuenki_cpp
@@ -40,33 +38,23 @@ namespace gyakuenki_cpp
 class IPM
 {
 public:
-  enum { TYPE_DNN, TYPE_COLOR };
-
-  struct ProjectedObject
-  {
-    keisan::Point3d position;
-    double confidence;
-    std::string label;
-  };
+  using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
+  using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
 
   IPM(
     const std::shared_ptr<rclcpp::Node> & node, const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
-    const std::shared_ptr<tf2_ros::TransformListener> & tf_listener);
+    const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path);
 
-  keisan::rotation_matrix get_rotation_matrix(const geometry_msgs::msg::Quaternion & q);
-  const cv::Point & get_object_projection_point();
+  const cv::Point & get_projection_point(const DetectedObject & detected_object, int object_type);
   const ProjectedObject & map_object(
-    const ninshiki_interfaces::msg::DetectedObject & detected_object, int object_type);
-
-  void load_camera_info_configuration(const std::string & path);
+    const DetectedObject & detected_object, int object_type, const std::string & output_frame);
 
 private:
   std::shared_ptr<rclcpp::Node> node;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener;
 
-  keisan::Matrix<3, 3> camera_matrix;           // Camera intrinsic matrix
-  std::vector<double> distortion_coefficients;  // Camera distortion cofficients
+  utils::CameraInfo camera_info;
 };
 
 }  // namespace gyakuenki_cpp
