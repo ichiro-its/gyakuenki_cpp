@@ -87,10 +87,15 @@ const ProjectedObject & IPM::map_object(
   double height_offset = utils::get_height_offset(detected_object.label);
 
   // Calculate the depth (Z) of the object in the camera frame.
-  // Z represents the distance between the camera and the object in the camera frame
-  double Z = utils::calculate_depth_of_field(height_offset, point, camera_info);
+  // Since the object always lies on ground plane, the Z can be calculated by comparing
+  // the height offset and the height difference between camera frame and output frame (i. e. T(2))
+  double denominator = R(2, 0) * point.x + R(2, 1) * point.y + R(2, 2);
+  if (std::abs(denominator) < 1e-6) {
+    throw std::runtime_error("Denominator is too close to zero, cannot compute Z.");
+  }
+  Z = height_offset / denominator;
 
-  // Using the pinhole camera model, we can calculate the 3D points in the camera frame
+  // Using the pinhole camera model, we can calculate the 3D points relative to camera frame
   keisan::Matrix<3, 1> Pw;
   Pw << point.x * Z, point.y * Z, Z;
 
