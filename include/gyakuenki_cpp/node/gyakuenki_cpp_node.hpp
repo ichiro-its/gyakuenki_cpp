@@ -28,7 +28,9 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "gyakuenki_cpp/projections/ipm.hpp"
+#include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "gyakuenki_interfaces/msg/projected_objects.hpp"
+#include "ninshiki_interfaces/msg/detected_objects.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -38,6 +40,7 @@ class GyakuenkiCppNode
 public:
   using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
   using ProjectedObjects = gyakuenki_interfaces::msg::ProjectedObjects;
+  using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
 
   GyakuenkiCppNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & path);
 

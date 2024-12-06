@@ -34,15 +34,16 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
   dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
     "ninshiki_cpp/dnn_detection", 10, [this](const DetectedObjects::SharedPtr message) {
-      ProjectedObjects protected_objects;
+      ProjectedObjects projected_objects;
 
       for (const auto & detected_object : message->detected_objects) {
         try {
           ProjectedObject projected_object =
             this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
-          projected_objects.push_back(projected_object);
+
+          projected_objects.projected_objects.push_back(projected_object);
         } catch (std::exception & e) {
-          RCLCPP_ERROR(node->get_logger(), e.what());
+          RCLCPP_ERROR(this->node->get_logger(), e.what());
         }
       }
 
