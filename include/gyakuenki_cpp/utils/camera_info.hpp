@@ -18,20 +18,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include <memory>
+#ifndef GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_
+#define GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_
 
-#include "gyakuenki_cpp/gyakuenki_cpp.hpp"
+#include <opencv2/opencv.hpp>
 
-int main(int argc, char ** argv)
+namespace gyakuenki_cpp::utils
 {
-  std::string path = argv[1];
 
-  auto node = std::make_shared<rclcpp::Node>("gyakuenki_cpp");
-  auto gyakuenki_cpp_node = std::make_shared<gyakuenki_cpp::GyakuenkiCppNode>(node, path);
+struct CameraInfo
+{
+  std::string frame_id;   // Camera frame id
+  double fx;              // Focal length x
+  double fy;              // Focal length y
+  double cx;              // Principal point x
+  double cy;              // Principal point y
+  std::vector<double> D;  // Distortion coefficients
+  int image_width;        // Image width
+  int image_height;       // Image height
+  bool use_distortion;    // Use distortion coefficients
 
-  rclcpp::spin(node);
+  CameraInfo();
+  void load_configuration(const std::string & config_path);
+};
 
-  rclcpp::shutdown();
+}  // namespace gyakuenki_cpp::utils
 
-  return 0;
-}
+#endif  // GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_

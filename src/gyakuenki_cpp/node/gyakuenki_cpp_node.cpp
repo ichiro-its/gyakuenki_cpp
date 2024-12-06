@@ -18,11 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef GYAKUENKI_CPP__GYAKUENKI_CPP_HPP_
-#define GYAKUENKI_CPP__GYAKUENKI_CPP_HPP_
-
 #include "gyakuenki_cpp/node/gyakuenki_cpp_node.hpp"
-#include "gyakuenki_cpp/projections/ipm.hpp"
-#include "gyakuenki_cpp/utils/camera_info.hpp"
 
-#endif  // GYAKUENKI_CPP__GYAKUENKI_CPP_HPP_
+namespace gyakuenki_cpp
+{
+
+GyakuenkiCppNode::GyakuenkiCppNode(
+  const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
+: node(node)
+{
+  tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+  tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
+
+  ipm = std::make_shared<IPM>(node, tf_buffer, tf_listener, config_path);
+
+  dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
+    "ninshiki_cpp/dnn_detection", 10, [this](const DetectedObjects::SharedPtr message) {
+      ProjectedObjects projected_objects;
+
+      for (const auto & detected_object : message->detected_objects) {
+        try {
+          ProjectedObject projected_object =
+            this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
+
+          projected_objects.projected_objects.push_back(projected_object);
+        } catch (std::exception & e) {
+          RCLCPP_ERROR(this->node->get_logger(), e.what());
+        }
+      }
+
+      projected_objects_publisher->publish(projected_objects);
+    });
+}
+
+}  // namespace gyakuenki_cpp
