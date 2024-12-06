@@ -58,11 +58,11 @@ void IPM::denormalize_pixel(cv::Point & pixel)
 
 void IPM::undistort_pixel(cv::Point & pixel)
 {
-  double k1 = camera_info.D(0);
-  double k2 = camera_info.D(1);
-  double p1 = camera_info.D(2);
-  double p2 = camera_info.D(3);
-  double k3 = camera_info.D(4);
+  double k1 = camera_info.D[0];
+  double k2 = camera_info.D[1];
+  double p1 = camera_info.D[2];
+  double p2 = camera_info.D[3];
+  double k3 = camera_info.D[4];
 
   // Normalize the pixel coordinates
   normalize_pixel(pixel);
@@ -133,15 +133,13 @@ const cv::Point & IPM::get_normalized_target_pixel(
 }
 
 // Convert quaternion to rotation matrix
-const keisan::rotation_matrix & IPM::quat_to_rotation_matrix(const Quaternion & q)
+const keisan::Matrix<4, 4> & IPM::quat_to_rotation_matrix(const Quaternion & q)
 {
   keisan::Quaternion<double> quat(q.x, q.y, q.z, q.w);
 
   keisan::Euler<double> euler = quat.euler();
 
-  keisan::rotation_matrix R(euler);
-
-  return R;
+  return keisan::rotation_matrix(euler);
 }
 
 // Find Pc (3D point in camera frame) using normalized pixel
@@ -149,28 +147,28 @@ const keisan::rotation_matrix & IPM::quat_to_rotation_matrix(const Quaternion & 
 // nc = plane normal in camera frame, Pc = 3D point in camera frame, d = distance from origin to plane
 // Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
 // Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
-const keisan::Matrix<3, 1> & IPM::point_in_camera_frame(
-  const cv::Point & pixel, const keisan::translation_matrix & T, const keisan::rotation_matrix & R,
-  const std::string & object_label)
+const keisan::Matrix<4, 1> & IPM::point_in_camera_frame(
+  const cv::Point & pixel, const keisan::translation_matrix<4, 4> & T,
+  const keisan::rotation_matrix<4, 4> & R, const std::string & object_label)
 {
   // Get object height
   double object_height =
     object_label == "ball" ? 0.153 / 2 : 0.0;  // For ball, the height is the radius of the ball
 
   // Calculate the Z coordinate in camera frame
-  double denominator = R(2, 0) * pixel.x + R(2, 1) * pixel.y + R(2, 2);
+  double denominator = R[2][0] * pixel.x + R[2][1] * pixel.y + R[2][2];
   if (std::abs(denominator) < 1e-6) {
     throw std::runtime_error("No intersection with base plane!");
   }
-  double Zc = object_height - T[2] / denominator;
+  double Zc = object_height - T[2][3] / denominator;
 
   // Calculate the X and Y coordinates in camera frame
   double Xc = Zc * pixel.x;
   double Yc = Zc * pixel.y;
 
   // Create the 3D point in camera frame
-  keisan::Matrix<3, 1> Pc;
-  Pc << Xc, Yc, Zc;
+  keisan::Matrix<4, 1> Pc;
+  Pc << Xc, Yc, Zc, 1;
 
   return Pc;
 }
@@ -205,15 +203,15 @@ const ProjectedObject & IPM::map_object(
   keisan::rotation_matrix R = quat_to_rotation_matrix(t.transform.rotation);
 
   // Get the translation matrix
-  keisan::Matrix<3, 1> T;
-  T << t.transform.translation.x, t.transform.translation.y, t.transform.translation.z;
+  keisan::Matrix<4, 4> T(keisan::Point3(
+    t.transform.translation.x, t.transform.translation.y, t.transform.translation.z));
 
   // Now, we have the 3D point in camera frame
-  keisan::Matrix<3, 1> Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
+  keisan::Matrix<4, 1> Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
 
   // But we want the 3D points relative to the output frame
   // Therefore, transform using spatial transformation
-  Pw = R * Pc + T;
+  keisan::Matrix<4, 1> Pw = (R * T) * Pc;
 
   // Create the ProjectedObject instance
   ProjectedObject projected_object;

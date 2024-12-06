@@ -30,6 +30,7 @@
 #include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include "gyakuenki_cpp/utils/camera_info.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "keisan/matrix.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
@@ -55,10 +56,10 @@ public:
   void denormalize_pixel(cv::Point & pixel);
   void undistort_pixel(cv::Point & pixel);
 
-  const keisan::rotation_matrix & quat_to_rotation_matrix(const Quaternion & q);
+  const keisan::Matrix<4, 4> & quat_to_rotation_matrix(const Quaternion & q);
 
-  const keisan::Matrix<3, 1> point_in_camera_frame(
-    const cv::Point & pixel, const keisan::Matrix<3, 1> & T, const keisan::rotation_matrix & R,
+  const keisan::Matrix<4, 1> point_in_camera_frame(
+    const cv::Point & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
     const std::string & object_label);
 
   const cv::Point & get_target_pixel(const DetectedObject & detected_object, int detection_type);
