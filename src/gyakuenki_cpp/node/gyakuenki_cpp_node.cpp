@@ -18,39 +18,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef GYAKUENKI_CPP__NODE__GYAKUENKI_CPP_NODE_HPP_
-#define GYAKUENKI_CPP__NODE__GYAKUENKI_CPP_NODE_HPP_
-
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
-
-#include <memory>
-#include <rclcpp/rclcpp.hpp>
-
-#include "gyakuenki_cpp/projections/ipm.hpp"
-#include "gyakuenki_interfaces/msg/projected_objects.hpp"
+#include "gyakuenki_cpp/node/gyakuenki_cpp_node.hpp"
 
 namespace gyakuenki_cpp
 {
 
-class GyakuenkiCppNode
+GyakuenkiCppNode::GyakuenkiCppNode(
+  const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
+: node(node)
 {
-public:
-  using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
-  using ProjectedObjects = gyakuenki_interfaces::msg::ProjectedObjects;
+  tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+  tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
 
-  GyakuenkiCppNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & path);
+  ipm = std::make_shared<IPM>(node, tf_buffer, tf_listener, config_path);
 
-private:
-  rclcpp::Node::SharedPtr node;
-  std::shared_ptr<tf2_ros::Buffer> tf_buffer;
-  std::shared_ptr<tf2_ros::TransformListener> tf_listener;
-  std::shared_ptr<gyakuenki_cpp::IPM> ipm;
+  dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
+    "ninshiki_cpp/dnn_detection", 10, [this](const DetectedObjects::SharedPtr message) {
+      ProjectedObjects protected_objects;
 
-  rclcpp::Publisher<ProjectedObjects>::SharedPtr projected_objects_publisher;
-  rclcpp::Subscription<DetectedObjects>::SharedPtr dnn_detection_subscriber;
-};
+      for (const auto & detected_object : message->detected_objects) {
+        ProjectedObject projected_object =
+          this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
+        projected_objects.push_back(projected_object);
+      }
+
+      projected_objects_publisher->publish(projected_objects);
+    });
+}
 
 }  // namespace gyakuenki_cpp
-
-#endif  // GYAKUENKI_CPP__NODE__GYAKUENKI_CPP_NODE_HPP_
