@@ -23,6 +23,6 @@
 
 #include "gyakuenki_cpp/node/gyakuenki_cpp_node.hpp"
 #include "gyakuenki_cpp/projections/ipm.hpp"
-#include "gyakuenki_cpp/utils/utils.hpp"
+#include "gyakuenki_cpp/utils/camera_info.hpp"
 
 #endif  // GYAKUENKI_CPP__GYAKUENKI_CPP_HPP_
