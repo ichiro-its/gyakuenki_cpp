@@ -23,24 +23,25 @@
 
 #include <opencv2/opencv.hpp>
 
-#include "keisan/matrix.hpp"
-
-namespace gyakuenki_cpp
+namespace gyakuenki_cpp::utils
 {
 
 struct CameraInfo
 {
-  std::string frame_id;    // Camera frame id
-  keisan::Matrix<3, 3> K;  // Intrinsic matrix
-  keisan::Matrix<1, 5> D;  // Distortion coefficients
-  int image_width;         // Image width
-  int image_height;        // Image height
-  bool use_distortion;     // Use distortion coefficients
+  std::string frame_id;   // Camera frame id
+  double fx;              // Focal length x
+  double fy;              // Focal length y
+  double cx;              // Principal point x
+  double cy;              // Principal point y
+  std::vector<double> D;  // Distortion coefficients
+  int image_width;        // Image width
+  int image_height;       // Image height
+  bool use_distortion;    // Use distortion coefficients
 
   CameraInfo();
-  load_configuration(const std::string & config_path);
+  void load_configuration(const std::string & config_path);
 };
 
-}  // namespace gyakuenki_cpp
+}  // namespace gyakuenki_cpp::utils
 
 #endif  // GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_

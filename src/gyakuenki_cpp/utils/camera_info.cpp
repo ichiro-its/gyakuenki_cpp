@@ -22,20 +22,23 @@
 
 #include "jitsuyo/config.hpp"
 
-namespace gyakuenki_cpp
+namespace gyakuenki_cpp::utils
 {
 
 CameraInfo::CameraInfo()
 : frame_id("camera"),
-  K(keisan::Matrix<3, 3>::zero()),
-  D(keisan::Matrix<1, 5>::zero()),
+  fx(0.0),
+  fy(0.0),
+  cx(0.0),
+  cy(0.0),
+  D(5),
   image_width(0),
   image_height(0),
   use_distortion(false)
 {
 }
 
-CameraInfo::load_configuration(const std::string & path)
+void CameraInfo::load_configuration(const std::string & config_path)
 {
   nlohmann::json config;
 
@@ -47,10 +50,10 @@ CameraInfo::load_configuration(const std::string & path)
 
   nlohmann::json camera_matrix_section;
   if (jitsuyo::assign_val(config, "camera_matrix", camera_matrix_section)) {
-    bool valid_section = jitsuyo::assign_val(camera_matrix_section, "fx", K(0, 0));
-    valid_section &= jitsuyo::assign_val(camera_matrix_section, "fy", K(1, 1));
-    valid_section &= jitsuyo::assign_val(camera_matrix_section, "cx", K(0, 2));
-    valid_section &= jitsuyo::assign_val(camera_matrix_section, "cy", K(1, 2));
+    bool valid_section = jitsuyo::assign_val(camera_matrix_section, "fx", fx);
+    valid_section &= jitsuyo::assign_val(camera_matrix_section, "fy", fy);
+    valid_section &= jitsuyo::assign_val(camera_matrix_section, "cx", cx);
+    valid_section &= jitsuyo::assign_val(camera_matrix_section, "cy", cy);
 
     if (!valid_section) {
       std::cout << "Error found at section `camera_matrix`" << std::endl;
@@ -65,11 +68,23 @@ CameraInfo::load_configuration(const std::string & path)
     bool valid_section = jitsuyo::assign_val(distortion_section, "use_distortion", use_distortion);
 
     if (use_distortion) {
-      valid_section &= jitsuyo::assign_val(distortion_section, "k1", D(0, 0));
-      valid_section &= jitsuyo::assign_val(distortion_section, "k2", D(0, 1));
-      valid_section &= jitsuyo::assign_val(distortion_section, "p1", D(0, 2));
-      valid_section &= jitsuyo::assign_val(distortion_section, "p2", D(0, 3));
-      valid_section &= jitsuyo::assign_val(distortion_section, "k3", D(0, 4));
+      double k1;
+      double k2;
+      double p1;
+      double p2;
+      double k3;
+
+      valid_section &= jitsuyo::assign_val(distortion_section, "k1", k1);
+      valid_section &= jitsuyo::assign_val(distortion_section, "k2", k2);
+      valid_section &= jitsuyo::assign_val(distortion_section, "p1", p1);
+      valid_section &= jitsuyo::assign_val(distortion_section, "p2", p2);
+      valid_section &= jitsuyo::assign_val(distortion_section, "k3", k3);
+
+      D.at(0) = k1;
+      D.at(1) = k2;
+      D.at(2) = p1;
+      D.at(3) = p2;
+      D.at(4) = k3;
     }
 
     if (!valid_section) {
@@ -98,4 +113,4 @@ CameraInfo::load_configuration(const std::string & path)
   }
 }
 
-}  // namespace gyakuenki_cpp
+}  // namespace gyakuenki_cpp::utils
