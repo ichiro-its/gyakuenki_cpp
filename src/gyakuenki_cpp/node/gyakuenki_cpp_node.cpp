@@ -37,9 +37,13 @@ GyakuenkiCppNode::GyakuenkiCppNode(
       ProjectedObjects protected_objects;
 
       for (const auto & detected_object : message->detected_objects) {
-        ProjectedObject projected_object =
-          this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
-        projected_objects.push_back(projected_object);
+        try {
+          ProjectedObject projected_object =
+            this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
+          projected_objects.push_back(projected_object);
+        } catch (std::exception & e) {
+          RCLCPP_ERROR(node->get_logger(), e.what());
+        }
       }
 
       projected_objects_publisher->publish(projected_objects);

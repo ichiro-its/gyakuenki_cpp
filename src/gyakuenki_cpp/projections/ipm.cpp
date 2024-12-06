@@ -195,7 +195,11 @@ const ProjectedObject & IPM::map_object(
 
   // Get the latest transform (Rotation and Translation) from the camera to the output frame which
   geometry_msgs::msg::TransformedStamped t;
-  t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+  try {
+    t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+  } catch (tf2::TransformException & ex) {
+    throw std::runtime_error(ex.what());
+  }
 
   // Convert the quaternion to rotation matrix R
   keisan::rotation_matrix R = quat_to_rotation_matrix(t.transform.rotation);
