@@ -108,7 +108,7 @@ const cv::Point & IPM::get_target_pixel(const DetectedObject & detected_object, 
 
       break;
     default:
-      throw std::runtime_error("Invalid object type");
+      throw std::runtime_error("Invalid detection type");
   }
 
   return point;
@@ -123,7 +123,7 @@ const cv::Point & IPM::get_normalized_target_pixel(
 
   // Un-distort the pixel coordinates if distortion is used
   if (camera_info.use_distortion) {
-    pixel = utils::undistort(pixel, camera_info, camera_info.use_distortion);
+    undistort_pixel(pixel);
   }
 
   normalize_pixel(pixel);
@@ -148,8 +148,8 @@ const keisan::Matrix<4, 4> & IPM::quat_to_rotation_matrix(const Quaternion & q)
 // Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
 // Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
 const keisan::Matrix<4, 1> & IPM::point_in_camera_frame(
-  const cv::Point & pixel, const keisan::translation_matrix<4, 4> & T,
-  const keisan::rotation_matrix<4, 4> & R, const std::string & object_label)
+  const cv::Point & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
+  const std::string & object_label)
 {
   // Get object height
   double object_height =
@@ -167,14 +167,13 @@ const keisan::Matrix<4, 1> & IPM::point_in_camera_frame(
   double Yc = Zc * pixel.y;
 
   // Create the 3D point in camera frame
-  keisan::Matrix<4, 1> Pc;
-  Pc << Xc, Yc, Zc, 1;
+  keisan::Matrix<4, 1> Pc(Xc, Yc, Zc, 1.0);
 
   return Pc;
 }
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
-const ProjectedObject & IPM::map_object(
+const gyakuenki_interfaces::msg::ProjectedObject & IPM::map_object(
   const DetectedObject & detected_object, int detection_type, const std::string & output_frame)
 {
   // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
@@ -192,7 +191,7 @@ const ProjectedObject & IPM::map_object(
   cv::Point norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
 
   // Get the latest transform (Rotation and Translation) from the camera to the output frame which
-  geometry_msgs::msg::TransformedStamped t;
+  geometry_msgs::msg::TransformStamped t;
   try {
     t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
   } catch (tf2::TransformException & ex) {
@@ -200,10 +199,10 @@ const ProjectedObject & IPM::map_object(
   }
 
   // Convert the quaternion to rotation matrix R
-  keisan::rotation_matrix R = quat_to_rotation_matrix(t.transform.rotation);
+  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(t.transform.rotation);
 
   // Get the translation matrix
-  keisan::Matrix<4, 4> T(keisan::Point3(
+  keisan::Matrix<4, 4> T = keisan::translation_matrix(keisan::Point3(
     t.transform.translation.x, t.transform.translation.y, t.transform.translation.z));
 
   // Now, we have the 3D point in camera frame
@@ -214,13 +213,13 @@ const ProjectedObject & IPM::map_object(
   keisan::Matrix<4, 1> Pw = (R * T) * Pc;
 
   // Create the ProjectedObject instance
-  ProjectedObject projected_object;
+  gyakuenki_interfaces::msg::ProjectedObject projected_object;
 
   projected_object.label = detected_object.label;
-  projected_object.center.x = Pw(0);
-  projected_object.center.y = Pw(1);
-  projected_object.center.z = Pw(2);
-  projected_object.confidence = detected_object.confidence;
+  projected_object.position.x = Pw[0][0];
+  projected_object.position.y = Pw[1][0];
+  projected_object.position.z = Pw[2][0];
+  projected_object.confidence = detected_object.score;
 
   return projected_object;
 }
