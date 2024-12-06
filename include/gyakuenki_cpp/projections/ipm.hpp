@@ -25,11 +25,13 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
+#include <geometry_msgs/msg/quaternion.hpp>
 #include <memory>
+#include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include "gyakuenki_cpp/utils/utils.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
+#include "keisan/matrix.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 
 namespace gyakuenki_cpp
@@ -40,17 +42,34 @@ class IPM
 public:
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
+  using Quaternion = geometry_msgs::msg::Quaternion;
+
+  enum { TYPE_DNN, TYPE_COLOR };
 
   IPM(
     const std::shared_ptr<rclcpp::Node> & node, const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
     const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path);
 
-  const cv::Point & get_projection_point(const DetectedObject & detected_object, int object_type);
+  bool object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type);
+  void normalize_pixel(cv::Point & pixel);
+  void denormalize_pixel(cv::Point & pixel);
+  void undistort_pixel(cv::Point & pixel);
+
+  const keisan::rotation_matrix & quat_to_rotation_matrix(const Quaternion & q);
+
+  const keisan::Matrix<3, 1> point_in_camera_frame(
+    const cv::Point & pixel, const keisan::Matrix<3, 1> & T, const keisan::rotation_matrix & R,
+    const std::string & object_label);
+
+  const cv::Point & get_target_pixel(const DetectedObject & detected_object, int detection_type);
+  const cv::Point & get_normalized_target_pixel(
+    const DetectedObject & detected_object, int detection_type);
+
   const ProjectedObject & map_object(
-    const DetectedObject & detected_object, int object_type, const std::string & output_frame);
+    const DetectedObject & detected_object, int detection_type, const std::string & output_frame);
 
 private:
-  std::shared_ptr<rclcpp::Node> node;
+  rclcpp::Node::SharedPtr node;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener;
 

@@ -29,87 +29,196 @@ IPM::IPM(
 : node(node), tf_buffer(tf_buffer), tf_listener(tf_listener)
 {
   // Load camera info
-  // camera_info.K = [ fx 0 cx]
-  //                 [ 0 fy cy]
-  //                 [ 0  0  1]
-  // camera_info.D = [k1 k2 p1 p2 k3]
-  // camera_info.image_width = width
-  // camera_info.image_height = height
-  camera_info = utils::load_camera_info(path);
+  camera_info.load_configuration(path);
 }
 
-// Get the object's normalized pixel coordinates that are going to be projected
-const cv::Point & IPM::get_projection_point(const DetectedObject & detected_object, int object_type)
+// Check if the bottom bounding box is at the bottom of the image
+bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type)
 {
-  // Get the object's pixel coordinates that are going to be projected
-  cv::Point point = utils::get_projection_pixels(detected_object, object_type);
+  // TODO: Handle for color detection
+  return detected_object.bottom >
+         camera_info.image_height - 5;  // TODO: Change 5 to a threshold variable
+}
 
-  // Un-distort the pixel coordinates if distortion is used
-  if (camera_info.use_distortion) {
-    point = utils::undistort(point, camera_info, camera_info.use_distortion);
+void IPM::normalize_pixel(cv::Point & pixel)
+{
+  // x = (u - cx) / fx
+  // y = (v - cy) / fy
+  pixel.x = (pixel.x - camera_info.cx) / camera_info.fx;
+  pixel.y = (pixel.y - camera_info.cy) / camera_info.fy;
+}
+
+void IPM::denormalize_pixel(cv::Point & pixel)
+{
+  // u = x * fx + cx
+  // v = y * fy + cy
+  pixel.x = pixel.x * camera_info.fx + camera_info.cx;
+  pixel.y = pixel.y * camera_info.fy + camera_info.cy;
+}
+
+void IPM::undistort_pixel(cv::Point & pixel)
+{
+  double k1 = camera_info.D(0);
+  double k2 = camera_info.D(1);
+  double p1 = camera_info.D(2);
+  double p2 = camera_info.D(3);
+  double k3 = camera_info.D(4);
+
+  // Normalize the pixel coordinates
+  normalize_pixel(pixel);
+
+  // Undistort the pixel coordinates
+  double x = pixel.x;
+  double y = pixel.y;
+
+  double r2 = x * x + y * y;
+  double r4 = r2 * r2;
+  double r6 = r4 * r2;
+
+  double x_corr = x * (1 + k1 * r2 + k2 * r4 + k3 * r6) + 2 * p1 * x * y + p2 * (r2 + 2 * x * x);
+  double y_corr = y * (1 + k1 * r2 + k2 * r4 + k3 * r6) + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y;
+
+  // Denormalize the pixel coordinates
+  denormalize_pixel(pixel);
+}
+
+// Get the target pixel (i. e. u and v) that are going to be projected depending on the object and detection type
+const cv::Point & IPM::get_target_pixel(const DetectedObject & detected_object, int detection_type)
+{
+  cv::Point point;
+
+  switch (detection_type) {
+    case TYPE_DNN:
+      // u is the center of the detection
+      point.x = detected_object.left + detected_object.right / 2;
+
+      // For goalpost and robot, v is the bottom of the detection
+      // Ball and field marks, v is the center of the detection
+      if (detected_object.label == "goalpost" || detected_object.label == "robot") {
+        point.y = detected_object.bottom;
+      } else {
+        point.y = detected_object.top + detected_object.bottom / 2;
+      }
+
+      break;
+    case TYPE_COLOR:
+      if (detected_object.label == "ball") {
+        // TODO: This should be received from soccer node
+      }
+
+      break;
+    default:
+      throw std::runtime_error("Invalid object type");
   }
-
-  // Normalize the undistorted pixels
-  // u = (u - cx) / fx
-  // v = (v - cy) / fy
-  point.x = (point.x - camera_info.K(0, 2)) / camera_info.K(0, 0);
-  point.y = (point.y - camera_info.K(1, 2)) / camera_info.K(1, 1);
 
   return point;
 }
 
-// Map the detected object to the 3D world relative to param output_frame using pinhole camera model
-const ProjectedObject & IPM::map_object(
-  const DetectedObject & detected_object, int object_type, const std::string & output_frame)
+// Get the object's normalized XY coordinates in image plane
+const cv::Point & IPM::get_normalized_target_pixel(
+  const DetectedObject & detected_object, int detection_type)
 {
-  // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image points p = [u, v, 1] is given by:
+  // Get the target pixel that are going to be projected (i. e. u and v)
+  cv::Point pixel = get_target_pixel(detected_object, detection_type);
+
+  // Un-distort the pixel coordinates if distortion is used
+  if (camera_info.use_distortion) {
+    pixel = utils::undistort(pixel, camera_info, camera_info.use_distortion);
+  }
+
+  normalize_pixel(pixel);
+
+  // Return the normalized pixel coordinates
+  return pixel;
+}
+
+// Convert quaternion to rotation matrix
+const keisan::rotation_matrix & IPM::quat_to_rotation_matrix(const Quaternion & q)
+{
+  keisan::Quaternion<double> quat(q.x, q.y, q.z, q.w);
+
+  keisan::Euler<double> euler = quat.euler();
+
+  keisan::rotation_matrix R(euler);
+
+  return R;
+}
+
+// Find Pc (3D point in camera frame) using normalized pixel
+// We will use general plane equation in camera frame: nc . Pc + d = 0
+// nc = plane normal in camera frame, Pc = 3D point in camera frame, d = distance from origin to plane
+// Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
+// Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
+const keisan::Matrix<3, 1> & IPM::point_in_camera_frame(
+  const cv::Point & pixel, const keisan::translation_matrix & T, const keisan::rotation_matrix & R,
+  const std::string & object_label)
+{
+  // Get object height
+  double object_height =
+    object_label == "ball" ? 0.153 / 2 : 0.0;  // For ball, the height is the radius of the ball
+
+  // Calculate the Z coordinate in camera frame
+  double denominator = R(2, 0) * pixel.x + R(2, 1) * pixel.y + R(2, 2);
+  if (std::abs(denominator) < 1e-6) {
+    throw std::runtime_error("No intersection with base plane!");
+  }
+  double Zc = object_height - T[2] / denominator;
+
+  // Calculate the X and Y coordinates in camera frame
+  double Xc = Zc * pixel.x;
+  double Yc = Zc * pixel.y;
+
+  // Create the 3D point in camera frame
+  keisan::Matrix<3, 1> Pc;
+  Pc << Xc, Yc, Zc;
+
+  return Pc;
+}
+
+// Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
+const ProjectedObject & IPM::map_object(
+  const DetectedObject & detected_object, int detection_type, const std::string & output_frame)
+{
+  // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
   // p = K * [R | T] * Pw
-  // where K is the camera intrinsic matrix, R is the rotation matrix, T is the translation vector
+  // where K is the camera intrinsic matrix, R is the rotation matrix and T is the translation matrix of the camera frame
+  //
   // The idea is to reverse this process to get the 3D world points from the 2D image points
 
-  // Get u and v coordinates
-  cv::Point point = get_projection_point(detected_object, object_type);
+  // We can not map the object if the bounding box touches the bottom of the image
+  if (object_at_bottom_of_image(detected_object, detection_type)) {
+    throw std::runtime_error("Bounding box touches the bottom of the image, can not map object!");
+  }
+
+  // First, get the normalized target pixel
+  cv::Point norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
 
   // Get the latest transform (Rotation and Translation) from the camera to the output frame which
-  // we will use later to transform the 3D points from camera frame to output frame
-  // According to ROS2 documentation, rclcpp::Node::get_clock()->now() can be used here but it will be converted to tf2::TimePoint anyways
   geometry_msgs::msg::TransformedStamped t;
   t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
 
-  // Convert the quaternion to a rotation matrix R
-  keisan::rotation_matrix R = utils::quat_to_rotation_matrix(t.transform.rotation);
+  // Convert the quaternion to rotation matrix R
+  keisan::rotation_matrix R = quat_to_rotation_matrix(t.transform.rotation);
 
   // Get the translation matrix
   keisan::Matrix<3, 1> T;
   T << t.transform.translation.x, t.transform.translation.y, t.transform.translation.z;
 
-  // Get the height offset of the detected object
-  double height_offset = utils::get_height_offset(detected_object.label);
-
-  // Calculate the depth (Z) of the object in the camera frame.
-  // Since the object always lies on ground plane, the Z can be calculated by comparing
-  // the height offset and the height difference between camera frame and output frame (i. e. T(2))
-  double denominator = R(2, 0) * point.x + R(2, 1) * point.y + R(2, 2);
-  if (std::abs(denominator) < 1e-6) {
-    throw std::runtime_error("Denominator is too close to zero, cannot compute Z.");
-  }
-  Z = height_offset / denominator;
-
-  // Using the pinhole camera model, we can calculate the 3D points relative to camera frame
-  keisan::Matrix<3, 1> Pw;
-  Pw << point.x * Z, point.y * Z, Z;
+  // Now, we have the 3D point in camera frame
+  keisan::Matrix<3, 1> Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
 
   // But we want the 3D points relative to the output frame
   // Therefore, transform using spatial transformation
-  Pw = R * Pw + T;
+  Pw = R * Pc + T;
 
   // Create the ProjectedObject instance
   ProjectedObject projected_object;
 
   projected_object.label = detected_object.label;
-  projected_object.x = Pw(0);
-  projected_object.y = Pw(1);
-  projected_object.z = Pw(2);
+  projected_object.center.x = Pw(0);
+  projected_object.center.y = Pw(1);
+  projected_object.center.z = Pw(2);
+  projected_object.confidence = detected_object.confidence;
 
   return projected_object;
 }
