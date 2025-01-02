@@ -18,11 +18,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifndef GYAKUENKI_CPP__GYAKUENKI_CPP_HPP_
-#define GYAKUENKI_CPP__GYAKUENKI_CPP_HPP_
+#ifndef GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_
+#define GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_
 
-#include "gyakuenki_cpp/node/gyakuenki_cpp_node.hpp"
-#include "gyakuenki_cpp/projections/ipm.hpp"
-#include "gyakuenki_cpp/utils/camera_info.hpp"
+#include <opencv2/opencv.hpp>
 
-#endif  // GYAKUENKI_CPP__GYAKUENKI_CPP_HPP_
+namespace gyakuenki_cpp::utils
+{
+
+struct CameraInfo
+{
+  std::string frame_id;   // Camera frame id
+  double fx;              // Focal length x
+  double fy;              // Focal length y
+  double cx;              // Principal point x
+  double cy;              // Principal point y
+  std::vector<double> D;  // Distortion coefficients
+  int image_width;        // Image width
+  int image_height;       // Image height
+  bool use_distortion;    // Use distortion coefficients
+
+  CameraInfo();
+  void load_configuration(const std::string & config_path);
+};
+
+}  // namespace gyakuenki_cpp::utils
+
+#endif  // GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_
