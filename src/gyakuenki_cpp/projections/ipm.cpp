@@ -83,7 +83,7 @@ void IPM::undistort_pixel(cv::Point & pixel)
 }
 
 // Get the target pixel (i. e. u and v) that are going to be projected depending on the object and detection type
-const cv::Point & IPM::get_target_pixel(const DetectedObject & detected_object, int detection_type)
+cv::Point IPM::get_target_pixel(const DetectedObject & detected_object, int detection_type)
 {
   cv::Point point;
 
@@ -115,7 +115,7 @@ const cv::Point & IPM::get_target_pixel(const DetectedObject & detected_object, 
 }
 
 // Get the object's normalized XY coordinates in image plane
-const cv::Point & IPM::get_normalized_target_pixel(
+cv::Point IPM::get_normalized_target_pixel(
   const DetectedObject & detected_object, int detection_type)
 {
   // Get the target pixel that are going to be projected (i. e. u and v)
@@ -133,7 +133,7 @@ const cv::Point & IPM::get_normalized_target_pixel(
 }
 
 // Convert quaternion to rotation matrix
-const keisan::Matrix<4, 4> & IPM::quat_to_rotation_matrix(const Quaternion & q)
+keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
 {
   keisan::Quaternion<double> quat(q.x, q.y, q.z, q.w);
 
@@ -147,7 +147,7 @@ const keisan::Matrix<4, 4> & IPM::quat_to_rotation_matrix(const Quaternion & q)
 // nc = plane normal in camera frame, Pc = 3D point in camera frame, d = distance from origin to plane
 // Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
 // Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
-const keisan::Matrix<4, 1> & IPM::point_in_camera_frame(
+keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   const cv::Point & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
   const std::string & object_label)
 {
@@ -173,7 +173,7 @@ const keisan::Matrix<4, 1> & IPM::point_in_camera_frame(
 }
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
-const gyakuenki_interfaces::msg::ProjectedObject & IPM::map_object(
+gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   const DetectedObject & detected_object, int detection_type, const std::string & output_frame)
 {
   // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:

@@ -55,17 +55,16 @@ public:
   void denormalize_pixel(cv::Point & pixel);
   void undistort_pixel(cv::Point & pixel);
 
-  const keisan::Matrix<4, 4> & quat_to_rotation_matrix(const Quaternion & q);
+  keisan::Matrix<4, 4> quat_to_rotation_matrix(const Quaternion & q);
 
-  const keisan::Matrix<4, 1> & point_in_camera_frame(
+  keisan::Matrix<4, 1> point_in_camera_frame(
     const cv::Point & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
     const std::string & object_label);
 
-  const cv::Point & get_target_pixel(const DetectedObject & detected_object, int detection_type);
-  const cv::Point & get_normalized_target_pixel(
-    const DetectedObject & detected_object, int detection_type);
+  cv::Point get_target_pixel(const DetectedObject & detected_object, int detection_type);
+  cv::Point get_normalized_target_pixel(const DetectedObject & detected_object, int detection_type);
 
-  const gyakuenki_interfaces::msg::ProjectedObject & map_object(
+  gyakuenki_interfaces::msg::ProjectedObject map_object(
     const DetectedObject & detected_object, int detection_type, const std::string & output_frame);
 
 private:
