@@ -24,7 +24,9 @@
 
 int main(int argc, char ** argv)
 {
-  std::string path = argv[1];
+  auto args = rclcpp::init_and_remove_ros_arguments(argc, argv);
+
+  const std::string & path = args[1];
 
   auto node = std::make_shared<rclcpp::Node>("gyakuenki_cpp");
   auto gyakuenki_cpp_node = std::make_shared<gyakuenki_cpp::GyakuenkiCppNode>(node, path);
