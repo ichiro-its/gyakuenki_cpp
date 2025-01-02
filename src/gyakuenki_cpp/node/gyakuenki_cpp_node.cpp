@@ -32,6 +32,9 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
   ipm = std::make_shared<IPM>(node, tf_buffer, tf_listener, config_path);
 
+  projected_objects_publisher =
+    node->create_publisher<ProjectedObjects>("gyakuenki_cpp/projected_objects", 10);
+
   dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
     "ninshiki_cpp/dnn_detection", 10, [this](const DetectedObjects::SharedPtr message) {
       ProjectedObjects projected_objects;
