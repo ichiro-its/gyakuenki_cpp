@@ -162,7 +162,7 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   if (std::abs(denominator) < 1e-6) {
     throw std::runtime_error("No intersection with base plane!");
   }
-  double Zc = object_height - T[2][3] / denominator;
+  double Zc = (object_height - T[2][3]) / denominator;
 
   // Calculate the X and Y coordinates in camera frame
   double Xc = Zc * pixel.x;
