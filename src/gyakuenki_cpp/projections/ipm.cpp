@@ -40,7 +40,7 @@ bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object, int 
          camera_info.image_height - 5;  // TODO: Change 5 to a threshold variable
 }
 
-void IPM::normalize_pixel(cv::Point & pixel)
+void IPM::normalize_pixel(cv::Point2d & pixel)
 {
   // x = (u - cx) / fx
   // y = (v - cy) / fy
@@ -48,7 +48,7 @@ void IPM::normalize_pixel(cv::Point & pixel)
   pixel.y = (pixel.y - camera_info.cy) / camera_info.fy;
 }
 
-void IPM::denormalize_pixel(cv::Point & pixel)
+void IPM::denormalize_pixel(cv::Point2d & pixel)
 {
   // u = x * fx + cx
   // v = y * fy + cy
@@ -56,7 +56,7 @@ void IPM::denormalize_pixel(cv::Point & pixel)
   pixel.y = pixel.y * camera_info.fy + camera_info.cy;
 }
 
-void IPM::undistort_pixel(cv::Point & pixel)
+void IPM::undistort_pixel(cv::Point2d & pixel)
 {
   double k1 = camera_info.D[0];
   double k2 = camera_info.D[1];
@@ -83,9 +83,9 @@ void IPM::undistort_pixel(cv::Point & pixel)
 }
 
 // Get the target pixel (i. e. u and v) that are going to be projected depending on the object and detection type
-cv::Point IPM::get_target_pixel(const DetectedObject & detected_object, int detection_type)
+cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object, int detection_type)
 {
-  cv::Point point;
+  cv::Point2d point;
 
   switch (detection_type) {
     case TYPE_DNN:
@@ -115,11 +115,11 @@ cv::Point IPM::get_target_pixel(const DetectedObject & detected_object, int dete
 }
 
 // Get the object's normalized XY coordinates in image plane
-cv::Point IPM::get_normalized_target_pixel(
+cv::Point2d IPM::get_normalized_target_pixel(
   const DetectedObject & detected_object, int detection_type)
 {
   // Get the target pixel that are going to be projected (i. e. u and v)
-  cv::Point pixel = get_target_pixel(detected_object, detection_type);
+  cv::Point2d pixel = get_target_pixel(detected_object, detection_type);
 
   // Un-distort the pixel coordinates if distortion is used
   if (camera_info.use_distortion) {
@@ -135,7 +135,9 @@ cv::Point IPM::get_normalized_target_pixel(
 // Convert quaternion to rotation matrix
 keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
 {
-  keisan::Quaternion<double> quat(q.x, q.y, q.z, q.w);
+  // Normalize the quaternion
+  double norm = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+  keisan::Quaternion<double> quat(q.x / norm, q.y / norm, q.z / norm, q.w / norm);
 
   keisan::Euler<double> euler = quat.euler();
 
@@ -148,7 +150,7 @@ keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
 // Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
 // Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
 keisan::Matrix<4, 1> IPM::point_in_camera_frame(
-  const cv::Point & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
+  const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
   const std::string & object_label)
 {
   // Get object height
@@ -188,7 +190,7 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   }
 
   // First, get the normalized target pixel
-  cv::Point norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
+  cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
 
   // Get the latest transform (Rotation and Translation) from the camera to the output frame which
   geometry_msgs::msg::TransformStamped t;

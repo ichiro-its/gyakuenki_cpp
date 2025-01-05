@@ -51,18 +51,19 @@ public:
     const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path);
 
   bool object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type);
-  void normalize_pixel(cv::Point & pixel);
-  void denormalize_pixel(cv::Point & pixel);
-  void undistort_pixel(cv::Point & pixel);
+  void normalize_pixel(cv::Point2d & pixel);
+  void denormalize_pixel(cv::Point2d & pixel);
+  void undistort_pixel(cv::Point2d & pixel);
 
   keisan::Matrix<4, 4> quat_to_rotation_matrix(const Quaternion & q);
 
   keisan::Matrix<4, 1> point_in_camera_frame(
-    const cv::Point & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
+    const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
     const std::string & object_label);
 
-  cv::Point get_target_pixel(const DetectedObject & detected_object, int detection_type);
-  cv::Point get_normalized_target_pixel(const DetectedObject & detected_object, int detection_type);
+  cv::Point2d get_target_pixel(const DetectedObject & detected_object, int detection_type);
+  cv::Point2d get_normalized_target_pixel(
+    const DetectedObject & detected_object, int detection_type);
 
   gyakuenki_interfaces::msg::ProjectedObject map_object(
     const DetectedObject & detected_object, int detection_type, const std::string & output_frame);
