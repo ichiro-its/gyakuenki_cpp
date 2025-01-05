@@ -212,7 +212,12 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
 
   // But we want the 3D points relative to the output frame
   // Therefore, transform using spatial transformation
-  keisan::Matrix<4, 1> Pw = (R * T) * Pc;
+  keisan::Matrix<4, 4> M = R;
+  M[0][3] = T[0][3];
+  M[1][3] = T[1][3];
+  M[2][3] = T[2][3];
+
+  keisan::Matrix<4, 1> Pw = M * Pc;
 
   // Create the ProjectedObject instance
   gyakuenki_interfaces::msg::ProjectedObject projected_object;
