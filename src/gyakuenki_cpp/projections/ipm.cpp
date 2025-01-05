@@ -139,9 +139,7 @@ keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
   double norm = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
   keisan::Quaternion<double> quat(q.x / norm, q.y / norm, q.z / norm, q.w / norm);
 
-  keisan::Euler<double> euler = quat.euler();
-
-  return keisan::rotation_matrix(euler);
+  return keisan::rotation_matrix(quat);
 }
 
 // Find Pc (3D point in camera frame) using normalized pixel
