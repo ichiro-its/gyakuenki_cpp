@@ -190,7 +190,7 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   // First, get the normalized target pixel
   cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
 
-  // Get the latest transform (Rotation and Translation) from the camera to the output frame which
+  // Get the latest transform (Rotation and Translation) from the camera to the output frame
   geometry_msgs::msg::TransformStamped t;
   try {
     t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
