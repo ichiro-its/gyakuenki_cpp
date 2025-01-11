@@ -55,9 +55,9 @@ void IPM::undistort_pixel(cv::Point2d & pixel)
   double p1 = camera_info.D[2];
   double p2 = camera_info.D[3];
   double k3 = camera_info.D[4];
-
-  // Normalize the pixel coordinates
-  normalize_pixel(pixel);
+  double k4 = camera_info.D[5];
+  double k5 = camera_info.D[6];
+  double k6 = camera_info.D[7];
 
   // Undistort the pixel coordinates
   double x = pixel.x;
