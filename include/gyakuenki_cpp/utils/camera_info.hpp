@@ -22,6 +22,8 @@
 #define GYAKUENKI_CPP__UTILS__CAMERA_INFO_HPP_
 
 #include <opencv2/opencv.hpp>
+#include <string>
+#include <vector>
 
 namespace gyakuenki_cpp::utils
 {

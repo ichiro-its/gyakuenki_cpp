@@ -31,7 +31,7 @@ CameraInfo::CameraInfo()
   fy(0.0),
   cx(0.0),
   cy(0.0),
-  D(5),
+  D(8),
   image_width(0),
   image_height(0),
   use_distortion(false)
@@ -68,23 +68,25 @@ void CameraInfo::load_configuration(const std::string & config_path)
     bool valid_section = jitsuyo::assign_val(distortion_section, "use_distortion", use_distortion);
 
     if (use_distortion) {
-      double k1;
-      double k2;
-      double p1;
-      double p2;
-      double k3;
+      double k1, k2, p1, p2, k3, k4, k5, k6;
 
       valid_section &= jitsuyo::assign_val(distortion_section, "k1", k1);
       valid_section &= jitsuyo::assign_val(distortion_section, "k2", k2);
       valid_section &= jitsuyo::assign_val(distortion_section, "p1", p1);
       valid_section &= jitsuyo::assign_val(distortion_section, "p2", p2);
       valid_section &= jitsuyo::assign_val(distortion_section, "k3", k3);
+      valid_section &= jitsuyo::assign_val(distortion_section, "k4", k4);
+      valid_section &= jitsuyo::assign_val(distortion_section, "k5", k5);
+      valid_section &= jitsuyo::assign_val(distortion_section, "k6", k6);
 
       D.at(0) = k1;
       D.at(1) = k2;
       D.at(2) = p1;
       D.at(3) = p2;
       D.at(4) = k3;
+      D.at(5) = k4;
+      D.at(6) = k5;
+      D.at(7) = k6;
     }
 
     if (!valid_section) {

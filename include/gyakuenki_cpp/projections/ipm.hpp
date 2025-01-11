@@ -52,7 +52,6 @@ public:
 
   bool object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type);
   void normalize_pixel(cv::Point2d & pixel);
-  void denormalize_pixel(cv::Point2d & pixel);
   void undistort_pixel(cv::Point2d & pixel);
 
   keisan::Matrix<4, 4> quat_to_rotation_matrix(const Quaternion & q);

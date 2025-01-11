@@ -48,14 +48,6 @@ void IPM::normalize_pixel(cv::Point2d & pixel)
   pixel.y = (pixel.y - camera_info.cy) / camera_info.fy;
 }
 
-void IPM::denormalize_pixel(cv::Point2d & pixel)
-{
-  // u = x * fx + cx
-  // v = y * fy + cy
-  pixel.x = pixel.x * camera_info.fx + camera_info.cx;
-  pixel.y = pixel.y * camera_info.fy + camera_info.cy;
-}
-
 void IPM::undistort_pixel(cv::Point2d & pixel)
 {
   double k1 = camera_info.D[0];
@@ -74,12 +66,16 @@ void IPM::undistort_pixel(cv::Point2d & pixel)
   double r2 = x * x + y * y;
   double r4 = r2 * r2;
   double r6 = r4 * r2;
+  double r8 = r4 * r4;
+  double r10 = r6 * r4;
+  double r12 = r6 * r6;
 
-  double x_corr = x * (1 + k1 * r2 + k2 * r4 + k3 * r6) + 2 * p1 * x * y + p2 * (r2 + 2 * x * x);
-  double y_corr = y * (1 + k1 * r2 + k2 * r4 + k3 * r6) + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y;
+  // Apply radial distortion
+  double radial_distortion = 1 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12;
 
-  // Denormalize the pixel coordinates
-  denormalize_pixel(pixel);
+  // Apply tangential distortion
+  pixel.x = x * radial_distortion + 2 * p1 * x * y + p2 * (r2 + 2 * x * x);
+  pixel.y = y * radial_distortion + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y;
 }
 
 // Get the target pixel (i. e. u and v) that are going to be projected depending on the object and detection type
@@ -121,12 +117,12 @@ cv::Point2d IPM::get_normalized_target_pixel(
   // Get the target pixel that are going to be projected (i. e. u and v)
   cv::Point2d pixel = get_target_pixel(detected_object, detection_type);
 
+  normalize_pixel(pixel);
+
   // Un-distort the pixel coordinates if distortion is used
   if (camera_info.use_distortion) {
     undistort_pixel(pixel);
   }
-
-  normalize_pixel(pixel);
 
   // Return the normalized pixel coordinates
   return pixel;
@@ -161,6 +157,10 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
     throw std::runtime_error("No intersection with base plane!");
   }
   double Zc = (object_height - T[2][3]) / denominator;
+
+  if (Zc < 0) {
+    throw std::runtime_error("Object is behind the camera frame!");
+  }
 
   // Calculate the X and Y coordinates in camera frame
   double Xc = Zc * pixel.x;
