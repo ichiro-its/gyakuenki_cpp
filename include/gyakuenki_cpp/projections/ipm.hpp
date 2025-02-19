@@ -22,6 +22,7 @@
 #define GYAKUENKI_CPP__IPM__GYAKUENKI_CPP_IPM_HPP_
 
 #include <tf2/exceptions.h>
+#include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -33,6 +34,7 @@
 #include "gyakuenki_cpp/utils/camera_info.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "keisan/matrix.hpp"
+#include "nlohmann/json.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 
 namespace gyakuenki_cpp
@@ -50,10 +52,16 @@ public:
     const std::shared_ptr<rclcpp::Node> & node, const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
     const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path);
 
+  void load_config(const std::string & path);
+  void set_config(const nlohmann::json & json);
+
   bool object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type);
   void normalize_pixel(cv::Point2d & pixel);
   void undistort_pixel(cv::Point2d & pixel);
 
+  tf2::Quaternion convert_to_tf2(const Quaternion & msg_quat);
+  Quaternion convert_to_msg(const tf2::Quaternion & tf2_quat);
+  tf2::Quaternion rpy_to_quaternion(double roll, double pitch, double yaw);
   keisan::Matrix<4, 4> quat_to_rotation_matrix(const Quaternion & q);
 
   keisan::Matrix<4, 1> point_in_camera_frame(
@@ -73,6 +81,15 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener;
 
   utils::CameraInfo camera_info;
+
+  double offset_roll;
+  double offset_pitch;
+  double offset_yaw;
+  tf2::Quaternion rotation_offset;
+
+  double offset_x;
+  double offset_y;
+  double offset_z;
 };
 
 }  // namespace gyakuenki_cpp

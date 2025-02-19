@@ -20,6 +20,8 @@
 
 #include "gyakuenki_cpp/projections/ipm.hpp"
 
+#include "jitsuyo/config.hpp"
+
 namespace gyakuenki_cpp
 {
 
@@ -30,7 +32,59 @@ IPM::IPM(
 {
   // Load camera info
   camera_info.load_configuration(path);
+  load_config(path);
 }
+
+void IPM::load_config(const std::string & path)
+{
+  // Load the configuration file
+  nlohmann::json data;
+  if (!jitsuyo::load_config(path, "camera_transform.json", data)) {
+    throw std::runtime_error("Failed to load configuration file `camera_transform.json`");
+  }
+
+  set_config(data);
+}
+
+void IPM::set_config(const nlohmann::json & json)
+{
+  bool valid_config = true;
+
+  nlohmann::json rotation_offset_section;
+  if (jitsuyo::assign_val(json, "rotation_offset", rotation_offset_section)) {
+    bool valid_section = true;
+    valid_section &= jitsuyo::assign_val(rotation_offset_section, "roll", offset_roll);
+    valid_section &= jitsuyo::assign_val(rotation_offset_section, "pitch", offset_pitch);
+    valid_section &= jitsuyo::assign_val(rotation_offset_section, "yaw", offset_yaw);
+    if (!valid_section) {
+      std::cout << "Error found at section `rotation_offset`" << std::endl;
+      valid_config = false;
+    }
+  } else {
+    valid_config = false;
+  }
+
+  rotation_offset = rpy_to_quaternion(offset_roll, offset_pitch, offset_yaw);
+
+  nlohmann::json translation_offset_section;
+  if (jitsuyo::assign_val(json, "translation_offset", translation_offset_section)) {
+    bool valid_section = true;
+    valid_section &= jitsuyo::assign_val(translation_offset_section, "x", offset_x);
+    valid_section &= jitsuyo::assign_val(translation_offset_section, "y", offset_y);
+    valid_section &= jitsuyo::assign_val(translation_offset_section, "z", offset_z);
+    if (!valid_section) {
+      std::cout << "Error found at section `translation_offset`" << std::endl;
+      valid_config = false;
+    }
+  } else {
+    valid_config = false;
+  }
+
+  if (!valid_config) {
+    throw std::runtime_error("Failed to set configuration file `camera_transformation.json`");
+  }
+}
+
 
 // Check if the bottom bounding box is at the bottom of the image
 bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type)
@@ -128,6 +182,31 @@ cv::Point2d IPM::get_normalized_target_pixel(
   return pixel;
 }
 
+// Convert msg::Quaternion to tf2::Quaternion
+tf2::Quaternion IPM::convert_to_tf2(const Quaternion & msg_quat) {
+  return tf2::Quaternion(msg_quat.x, msg_quat.y, msg_quat.z, msg_quat.w);
+}
+
+// Convert tf2::Quaternion to msg::Quaternion
+geometry_msgs::msg::Quaternion IPM::convert_to_msg(const tf2::Quaternion & tf2_quat) {
+  Quaternion msg_quat;
+  msg_quat.x = tf2_quat.x();
+  msg_quat.y = tf2_quat.y();
+  msg_quat.z = tf2_quat.z();
+  msg_quat.w = tf2_quat.w();
+
+  return msg_quat;
+}
+
+// Convert rpy to quaternion
+tf2::Quaternion IPM::rpy_to_quaternion(double roll, double pitch, double yaw)
+{
+  tf2::Quaternion q;
+  q.setRPY(roll, pitch, yaw);
+
+  return q;
+}
+
 // Convert quaternion to rotation matrix
 keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
 {
@@ -199,11 +278,16 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   }
 
   // Convert the quaternion to rotation matrix R
-  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(t.transform.rotation);
+  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(
+    convert_to_msg(convert_to_tf2(t.transform.rotation) * rotation_offset)
+  );
 
   // Get the translation matrix
   keisan::Matrix<4, 4> T = keisan::translation_matrix(keisan::Point3(
-    t.transform.translation.x, t.transform.translation.y, t.transform.translation.z));
+    t.transform.translation.x + offset_x,
+    t.transform.translation.y + offset_y,
+    t.transform.translation.z + offset_z
+  ));
 
   // Now, we have the 3D point in camera frame
   keisan::Matrix<4, 1> Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
