@@ -58,9 +58,10 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
     // Camera Offset Services
     get_camera_offset_service = node->create_service<GetCameraOffset>(
-      "camera/get_camera_offset", [this](
+      "camera/get_camera_offset", [this, config_path](
         const GetCameraOffset::Request::SharedPtr request,
         GetCameraOffset::Response::SharedPtr response) {
+        this->ipm->load_config(config_path);
         auto camera_offset = this->ipm->get_camera_offset();
         response->position_x = camera_offset.position.x;
         response->position_y = camera_offset.position.y;
