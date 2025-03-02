@@ -27,6 +27,9 @@ GyakuenkiCppNode::GyakuenkiCppNode(
   const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
 : node(node)
 {
+  using GetCameraOffset = gyakuenki_interfaces::srv::GetCameraOffset;
+  using UpdateCameraOffset = gyakuenki_interfaces::srv::UpdateCameraOffset;
+
   tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
   tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
 
@@ -52,6 +55,40 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
       projected_objects_publisher->publish(projected_objects);
     });
+
+    // Camera Offset Services
+    get_camera_offset_service = node->create_service<GetCameraOffset>(
+      "camera/get_camera_offset", [this, config_path](
+        const GetCameraOffset::Request::SharedPtr request,
+        GetCameraOffset::Response::SharedPtr response) {
+        this->ipm->load_config(config_path);
+        auto camera_offset = this->ipm->get_camera_offset();
+        response->position_x = camera_offset.position.x;
+        response->position_y = camera_offset.position.y;
+        response->position_z = camera_offset.position.z;
+
+        response->roll = camera_offset.roll.degree();
+        response->pitch = camera_offset.pitch.degree();
+        response->yaw = camera_offset.yaw.degree();
+
+        response->status = true;
+      });
+
+    update_camera_offset_service = node->create_service<UpdateCameraOffset>(
+      "camera/update_camera_offset", [this](
+        const UpdateCameraOffset::Request::SharedPtr request,
+        UpdateCameraOffset::Response::SharedPtr response) {
+        this->ipm->set_config(
+          request->position_x, request->position_y, request->position_z, request->roll,
+          request->pitch, request->yaw);
+
+        if (request->save) {
+          this->ipm->save_config();
+        }
+
+        response->status = true;
+      });
+
 }
 
 }  // namespace gyakuenki_cpp

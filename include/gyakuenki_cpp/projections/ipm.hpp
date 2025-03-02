@@ -22,6 +22,7 @@
 #define GYAKUENKI_CPP__IPM__GYAKUENKI_CPP_IPM_HPP_
 
 #include <tf2/exceptions.h>
+#include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -33,6 +34,7 @@
 #include "gyakuenki_cpp/utils/camera_info.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "keisan/matrix.hpp"
+#include "nlohmann/json.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 
 namespace gyakuenki_cpp
@@ -41,6 +43,14 @@ namespace gyakuenki_cpp
 class IPM
 {
 public:
+  struct CameraOffset
+  {
+    keisan::Point3 position;
+    keisan::Angle<double> roll;
+    keisan::Angle<double> pitch;
+    keisan::Angle<double> yaw;
+  };
+
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
   using Quaternion = geometry_msgs::msg::Quaternion;
 
@@ -50,10 +60,17 @@ public:
     const std::shared_ptr<rclcpp::Node> & node, const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
     const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path);
 
+  std::string config_path;
+  void load_config(const std::string & path);
+  void set_config(double x, double y, double z, double roll, double pitch, double yaw);
+  void save_config();
+
   bool object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type);
   void normalize_pixel(cv::Point2d & pixel);
   void undistort_pixel(cv::Point2d & pixel);
 
+  Quaternion tf2_to_msg(const tf2::Quaternion & tf2_quat);
+  tf2::Quaternion msg_to_tf2(const Quaternion & msg_quat);
   keisan::Matrix<4, 4> quat_to_rotation_matrix(const Quaternion & q);
 
   keisan::Matrix<4, 1> point_in_camera_frame(
@@ -67,12 +84,16 @@ public:
   gyakuenki_interfaces::msg::ProjectedObject map_object(
     const DetectedObject & detected_object, int detection_type, const std::string & output_frame);
 
+  const CameraOffset & get_camera_offset() const { return camera_offset; }
+
 private:
   rclcpp::Node::SharedPtr node;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener;
 
   utils::CameraInfo camera_info;
+  CameraOffset camera_offset;
+  tf2::Quaternion rotation_offset;
 };
 
 }  // namespace gyakuenki_cpp
