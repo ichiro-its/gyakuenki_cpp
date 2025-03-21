@@ -39,21 +39,26 @@ void IPM::load_config(const std::string & path)
 {
   nlohmann::json config;
   if (!jitsuyo::load_config(path, "camera_offset.json", config)) {
-    throw std::runtime_error("Unable to open `" + path + "camera_offset.json`!");
+    throw std::runtime_error("Failed to load configuration file `camera_offset.json`");
   }
 
+  bool valid_config = true;
   double roll_double;
   double pitch_double;
   double yaw_double;
 
-  if (!jitsuyo::assign_val(config, "x", camera_offset.position.x) ||
-    !jitsuyo::assign_val(config, "y", camera_offset.position.y) ||
-    !jitsuyo::assign_val(config, "z", camera_offset.position.z) ||
-    !jitsuyo::assign_val(config, "roll", roll_double) ||
-    !jitsuyo::assign_val(config, "pitch", pitch_double) ||
-    !jitsuyo::assign_val(config, "yaw", yaw_double))
-  {
-    throw std::runtime_error("Failed to load config file `" + path + "camera_offset.json`");
+  nlohmann::json rotation_offset_section;
+  if (jitsuyo::assign_val(config, "rotation_offset", rotation_offset_section)) {
+    bool valid_section = true;
+    valid_section &= jitsuyo::assign_val(rotation_offset_section, "roll", roll_double);
+    valid_section &= jitsuyo::assign_val(rotation_offset_section, "pitch", pitch_double);
+    valid_section &= jitsuyo::assign_val(rotation_offset_section, "yaw", yaw_double);
+    if (!valid_section) {
+      std::cout << "Error found at section `rotation_offset`" << std::endl;
+      valid_config = false;
+    }
+  } else {
+    valid_config = false;
   }
 
   camera_offset.roll = keisan::make_degree(roll_double);
@@ -63,6 +68,24 @@ void IPM::load_config(const std::string & path)
   rotation_offset.setRPY(camera_offset.roll.radian(),
                          camera_offset.pitch.radian(),
                          camera_offset.yaw.radian());
+
+  nlohmann::json position_offset_section;
+  if (jitsuyo::assign_val(config, "position_offset", position_offset_section)) {
+    bool valid_section = true;
+    valid_section &= jitsuyo::assign_val(position_offset_section, "x", camera_offset.position.x);
+    valid_section &= jitsuyo::assign_val(position_offset_section, "y", camera_offset.position.y);
+    valid_section &= jitsuyo::assign_val(position_offset_section, "z", camera_offset.position.z);
+    if (!valid_section) {
+      std::cout << "Error found at section `position_offset`" << std::endl;
+      valid_config = false;
+    }
+  } else {
+    valid_config = false;
+  }
+
+  if (!valid_config) {
+    throw std::runtime_error("Failed to set configuration file `camera_offset.json`");
+  }
 }
 
 void IPM::set_config(double x, double y, double z, double roll, double pitch, double yaw)
@@ -80,12 +103,13 @@ void IPM::save_config()
 {
   nlohmann::json config;
 
-  config["x"] = camera_offset.position.x;
-  config["y"] = camera_offset.position.y;
-  config["z"] = camera_offset.position.z;
-  config["roll"] = camera_offset.roll.degree();
-  config["pitch"] = camera_offset.pitch.degree();
-  config["yaw"] = camera_offset.yaw.degree();
+  config["rotation_offset"]["roll"] = camera_offset.roll.degree();
+  config["rotation_offset"]["pitch"] = camera_offset.pitch.degree();
+  config["rotation_offset"]["yaw"] = camera_offset.yaw.degree();
+
+  config["position_offset"]["x"] = camera_offset.position.x;
+  config["position_offset"]["y"] = camera_offset.position.y;
+  config["position_offset"]["z"] = camera_offset.position.z;
 
   jitsuyo::save_config(config_path, "camera_offset.json", config);
 }
