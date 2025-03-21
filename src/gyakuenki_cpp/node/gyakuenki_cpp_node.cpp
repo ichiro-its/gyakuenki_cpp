@@ -38,6 +38,8 @@ GyakuenkiCppNode::GyakuenkiCppNode(
   projected_objects_publisher =
     node->create_publisher<ProjectedObjects>("gyakuenki_cpp/projected_objects", 10);
 
+  point_cloud_publisher = node->create_publisher<PointCloud2>("gyakuenki_cpp/point_cloud", 10);
+
   dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
     "ninshiki_cpp/dnn_detection", 10, [this](const DetectedObjects::SharedPtr message) {
       this->publish_projected_objects(message);
