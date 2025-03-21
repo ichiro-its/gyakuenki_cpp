@@ -21,8 +21,8 @@
 #ifndef GYAKUENKI_CPP__IPM__GYAKUENKI_CPP_IPM_HPP_
 #define GYAKUENKI_CPP__IPM__GYAKUENKI_CPP_IPM_HPP_
 
-#include <tf2/exceptions.h>
 #include <tf2/LinearMath/Quaternion.h>
+#include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -34,8 +34,8 @@
 #include "gyakuenki_cpp/utils/camera_info.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "keisan/matrix.hpp"
-#include "nlohmann/json.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
+#include "nlohmann/json.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -83,7 +83,8 @@ public:
 
   gyakuenki_interfaces::msg::ProjectedObject map_object(
     const DetectedObject & detected_object, int detection_type, const std::string & output_frame);
-  keisan::Matrix<4, 1> get_camera_frame_points(const DetectedObject & detected_object, int detection_type)
+  keisan::Matrix<4, 1> get_camera_frame_points(
+    const DetectedObject & detected_object, int detection_type);
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }
 
