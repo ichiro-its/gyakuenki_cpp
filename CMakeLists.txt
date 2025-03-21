@@ -22,6 +22,7 @@ find_package(rclcpp REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(jitsuyo REQUIRED)
@@ -39,6 +40,7 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2
   tf2_ros
   tf2_geometry_msgs
+  sensor_msgs
   geometry_msgs
   OpenCV
   jitsuyo
@@ -78,6 +80,7 @@ ament_export_dependencies(
   tf2
   tf2_ros
   tf2_geometry_msgs
+  sensor_msgs
   geometry_msgs
   OpenCV
   jitsuyo

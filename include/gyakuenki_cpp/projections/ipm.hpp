@@ -83,6 +83,7 @@ public:
 
   gyakuenki_interfaces::msg::ProjectedObject map_object(
     const DetectedObject & detected_object, int detection_type, const std::string & output_frame);
+  keisan::Matrix<4, 1> get_camera_frame_points(const DetectedObject & detected_object, int detection_type)
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }
 

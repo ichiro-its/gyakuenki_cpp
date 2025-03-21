@@ -308,4 +308,36 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   return projected_object;
 }
 
+keisan::Matrix<4, 1> IPM::get_camera_frame_points(const DetectedObject & detected_object, int detection_type)
+{
+  if (object_at_bottom_of_image(detected_object, detection_type)) {
+    throw std::runtime_error("Bounding box touches the bottom of the image, can not map object!");
+  }
+
+  // First, get the normalized target pixel
+  cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
+
+  // Get the latest transform (Rotation and Translation) from the camera to camera frame
+  geometry_msgs::msg::TransformStamped t;
+  try {
+    t = tf_buffer->lookupTransform(camera_info.frame_id, camera_info.frame_id, tf2::TimePointZero);
+  } catch (tf2::TransformException & ex) {
+    throw std::runtime_error(ex.what());
+  }
+
+  // Convert the quaternion to rotation matrix R
+  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(
+    tf2_to_msg(msg_to_tf2(t.transform.rotation) * rotation_offset)
+  );
+
+  // Get the translation matrix
+  keisan::Matrix<4, 4> T = keisan::translation_matrix(keisan::Point3(
+    camera_offset.position.x,
+    camera_offset.position.y,
+    camera_offset.position.z
+  ));
+  
+  return point_in_camera_frame(norm_pixel, T, R, detected_object.label);
+}
+
 }  // namespace gyakuenki_cpp

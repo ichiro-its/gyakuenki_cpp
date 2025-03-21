@@ -40,55 +40,98 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
   dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
     "ninshiki_cpp/dnn_detection", 10, [this](const DetectedObjects::SharedPtr message) {
-      ProjectedObjects projected_objects;
-
-      for (const auto & detected_object : message->detected_objects) {
-        try {
-          ProjectedObject projected_object =
-            this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
-
-          projected_objects.projected_objects.push_back(projected_object);
-        } catch (std::exception & e) {
-          RCLCPP_ERROR(this->node->get_logger(), e.what());
-        }
-      }
-
-      projected_objects_publisher->publish(projected_objects);
+      this->publish_projected_objects(message);
+      this->publish_point_clouds(message);
     });
 
-    // Camera Offset Services
-    get_camera_offset_service = node->create_service<GetCameraOffset>(
-      "camera/get_camera_offset", [this, config_path](
-        const GetCameraOffset::Request::SharedPtr request,
-        GetCameraOffset::Response::SharedPtr response) {
-        this->ipm->load_config(config_path);
-        auto camera_offset = this->ipm->get_camera_offset();
-        response->position_x = camera_offset.position.x;
-        response->position_y = camera_offset.position.y;
-        response->position_z = camera_offset.position.z;
+  // Camera Offset Services
+  get_camera_offset_service = node->create_service<GetCameraOffset>(
+    "camera/get_camera_offset", [this, config_path](
+                                  const GetCameraOffset::Request::SharedPtr request,
+                                  GetCameraOffset::Response::SharedPtr response) {
+      this->ipm->load_config(config_path);
+      auto camera_offset = this->ipm->get_camera_offset();
+      response->position_x = camera_offset.position.x;
+      response->position_y = camera_offset.position.y;
+      response->position_z = camera_offset.position.z;
 
-        response->roll = camera_offset.roll.degree();
-        response->pitch = camera_offset.pitch.degree();
-        response->yaw = camera_offset.yaw.degree();
+      response->roll = camera_offset.roll.degree();
+      response->pitch = camera_offset.pitch.degree();
+      response->yaw = camera_offset.yaw.degree();
 
-        response->status = true;
-      });
+      response->status = true;
+    });
 
-    update_camera_offset_service = node->create_service<UpdateCameraOffset>(
-      "camera/update_camera_offset", [this](
-        const UpdateCameraOffset::Request::SharedPtr request,
-        UpdateCameraOffset::Response::SharedPtr response) {
-        this->ipm->set_config(
-          request->position_x, request->position_y, request->position_z, request->roll,
-          request->pitch, request->yaw);
+  update_camera_offset_service = node->create_service<UpdateCameraOffset>(
+    "camera/update_camera_offset", [this](
+                                     const UpdateCameraOffset::Request::SharedPtr request,
+                                     UpdateCameraOffset::Response::SharedPtr response) {
+      this->ipm->set_config(
+        request->position_x, request->position_y, request->position_z, request->roll,
+        request->pitch, request->yaw);
 
-        if (request->save) {
-          this->ipm->save_config();
-        }
+      if (request->save) {
+        this->ipm->save_config();
+      }
 
-        response->status = true;
-      });
-
+      response->status = true;
+    });
 }
 
+void GyakuenkiCppNode::publish_projected_objects(const DetectedObjects::SharedPtr & message)
+{
+  ProjectedObjects projected_objects;
+
+  for (const auto & detected_object : message->detected_objects) {
+    try {
+      ProjectedObject projected_object =
+        this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
+
+      projected_objects.projected_objects.push_back(projected_object);
+    } catch (std::exception & e) {
+      RCLCPP_ERROR(this->node->get_logger(), e.what());
+    }
+  }
+
+  projected_objects_publisher->publish(projected_objects);
+}
+
+void GyakuenkiCppNode::publish_point_clouds(const DetectedObjects::SharedPtr & message)
+{
+  PointCloud2 cloud_msg;
+  cloud_msg.header.frame_id = "camera";
+  cloud_msg.header.stamp = node->now();
+
+  // Define the fields of PointCloud2
+  cloud_msg.height = 1;
+  cloud_msg.is_bigendian = false;
+  cloud_msg.is_dense = true;
+
+  // Fields: x, y, z
+  sensor_msgs::PointCloud2Modifier modifier(cloud_msg);
+  modifier.setPointCloud2Fields(
+    3, "x", 1, PointField::FLOAT32, "y", 1, PointField::FLOAT32, "z", 1, PointField::FLOAT32);
+
+  sensor_msgs::PointCloud2Iterator<float> iter_x(cloud_msg, "x");
+  sensor_msgs::PointCloud2Iterator<float> iter_y(cloud_msg, "y");
+  sensor_msgs::PointCloud2Iterator<float> iter_z(cloud_msg, "z");
+
+  for (const auto & detected_object : message->detected_objects) {
+    try {
+      auto Pc = this->ipm->get_camera_frame_points(detected_object, IPM::TYPE_DNN);
+
+      *iter_x = Pc[0][0];
+      *iter_y = Pc[1][0];
+      *iter_z = Pc[2][0];
+
+      ++iter_x;
+      ++iter_y;
+      ++iter_z;
+    } catch (std::exception & e) {
+      RCLCPP_WARN(this->node->get_logger(), e.what());
+    }
+  }
+
+  point_cloud_publisher->publish(cloud_msg);
+}
 }  // namespace gyakuenki_cpp
