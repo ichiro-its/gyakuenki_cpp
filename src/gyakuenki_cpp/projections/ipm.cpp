@@ -46,13 +46,13 @@ void IPM::load_config(const std::string & path)
   double pitch_double;
   double yaw_double;
 
-  if (!jitsuyo::assign_val(config, "x", camera_offset.position.x) ||
+  if (
+    !jitsuyo::assign_val(config, "x", camera_offset.position.x) ||
     !jitsuyo::assign_val(config, "y", camera_offset.position.y) ||
     !jitsuyo::assign_val(config, "z", camera_offset.position.z) ||
     !jitsuyo::assign_val(config, "roll", roll_double) ||
     !jitsuyo::assign_val(config, "pitch", pitch_double) ||
-    !jitsuyo::assign_val(config, "yaw", yaw_double))
-  {
+    !jitsuyo::assign_val(config, "yaw", yaw_double)) {
     throw std::runtime_error("Failed to load config file `" + path + "camera_offset.json`");
   }
 
@@ -60,9 +60,8 @@ void IPM::load_config(const std::string & path)
   camera_offset.pitch = keisan::make_degree(pitch_double);
   camera_offset.yaw = keisan::make_degree(yaw_double);
 
-  rotation_offset.setRPY(camera_offset.roll.radian(),
-                         camera_offset.pitch.radian(),
-                         camera_offset.yaw.radian());
+  rotation_offset.setRPY(
+    camera_offset.roll.radian(), camera_offset.pitch.radian(), camera_offset.yaw.radian());
 }
 
 void IPM::set_config(double x, double y, double z, double roll, double pitch, double yaw)
@@ -73,7 +72,8 @@ void IPM::set_config(double x, double y, double z, double roll, double pitch, do
   camera_offset.roll = keisan::make_degree(roll);
   camera_offset.pitch = keisan::make_degree(pitch);
   camera_offset.yaw = keisan::make_degree(yaw);
-  rotation_offset.setRPY(camera_offset.roll.radian(), camera_offset.pitch.radian(), camera_offset.yaw.radian());
+  rotation_offset.setRPY(
+    camera_offset.roll.radian(), camera_offset.pitch.radian(), camera_offset.yaw.radian());
 }
 
 void IPM::save_config()
@@ -187,7 +187,8 @@ cv::Point2d IPM::get_normalized_target_pixel(
 }
 
 // Convert tf2::Quaternion to msg::Quaternion
-IPM::Quaternion IPM::tf2_to_msg(const tf2::Quaternion & tf2_quat) {
+IPM::Quaternion IPM::tf2_to_msg(const tf2::Quaternion & tf2_quat)
+{
   Quaternion msg_quat;
   msg_quat.x = tf2_quat.x();
   msg_quat.y = tf2_quat.y();
@@ -198,7 +199,8 @@ IPM::Quaternion IPM::tf2_to_msg(const tf2::Quaternion & tf2_quat) {
 }
 
 // Convert msg::Quaternion to tf2::Quaternion
-tf2::Quaternion IPM::msg_to_tf2(const Quaternion & msg_quat) {
+tf2::Quaternion IPM::msg_to_tf2(const Quaternion & msg_quat)
+{
   return tf2::Quaternion(msg_quat.x, msg_quat.y, msg_quat.z, msg_quat.w);
 }
 
@@ -248,7 +250,8 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
 gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
-  const DetectedObject & detected_object, int detection_type, const std::string & output_frame)
+  const DetectedObject & detected_object, int detection_type, const std::string & output_frame,
+  keisan::Matrix<4, 1> & Pc)
 {
   // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
   // p = K * [R | T] * Pw
@@ -273,19 +276,17 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   }
 
   // Convert the quaternion to rotation matrix R
-  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(
-    tf2_to_msg(msg_to_tf2(t.transform.rotation) * rotation_offset)
-  );
+  keisan::Matrix<4, 4> R =
+    quat_to_rotation_matrix(tf2_to_msg(msg_to_tf2(t.transform.rotation) * rotation_offset));
 
   // Get the translation matrix
   keisan::Matrix<4, 4> T = keisan::translation_matrix(keisan::Point3(
     t.transform.translation.x + camera_offset.position.x,
     t.transform.translation.y + camera_offset.position.y,
-    t.transform.translation.z + camera_offset.position.z
-  ));
+    t.transform.translation.z + camera_offset.position.z));
 
   // Now, we have the 3D point in camera frame
-  keisan::Matrix<4, 1> Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
+  Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
 
   // But we want the 3D points relative to the output frame
   // Therefore, transform using spatial transformation
@@ -306,38 +307,6 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   projected_object.confidence = detected_object.score;
 
   return projected_object;
-}
-
-keisan::Matrix<4, 1> IPM::get_camera_frame_points(const DetectedObject & detected_object, int detection_type)
-{
-  if (object_at_bottom_of_image(detected_object, detection_type)) {
-    throw std::runtime_error("Bounding box touches the bottom of the image, can not map object!");
-  }
-
-  // First, get the normalized target pixel
-  cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
-
-  // Get the latest transform (Rotation and Translation) from the camera to camera frame
-  geometry_msgs::msg::TransformStamped t;
-  try {
-    t = tf_buffer->lookupTransform(camera_info.frame_id, camera_info.frame_id, tf2::TimePointZero);
-  } catch (tf2::TransformException & ex) {
-    throw std::runtime_error(ex.what());
-  }
-
-  // Convert the quaternion to rotation matrix R
-  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(
-    tf2_to_msg(msg_to_tf2(t.transform.rotation) * rotation_offset)
-  );
-
-  // Get the translation matrix
-  keisan::Matrix<4, 4> T = keisan::translation_matrix(keisan::Point3(
-    camera_offset.position.x,
-    camera_offset.position.y,
-    camera_offset.position.z
-  ));
-  
-  return point_in_camera_frame(norm_pixel, T, R, detected_object.label);
 }
 
 }  // namespace gyakuenki_cpp

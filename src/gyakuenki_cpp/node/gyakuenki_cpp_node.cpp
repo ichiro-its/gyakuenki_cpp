@@ -38,13 +38,11 @@ GyakuenkiCppNode::GyakuenkiCppNode(
   projected_objects_publisher =
     node->create_publisher<ProjectedObjects>("gyakuenki_cpp/projected_objects", 10);
 
-  point_cloud_publisher = node->create_publisher<PointCloud2>("gyakuenki_cpp/point_cloud", 10);
+  markers_publisher = node->create_publisher<MarkerArray>("gyakuenki_cpp/markers", 10);
 
   dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
-    "ninshiki_cpp/dnn_detection", 10, [this](const DetectedObjects::SharedPtr message) {
-      this->publish_projected_objects(message);
-      this->publish_point_clouds(message);
-    });
+    "ninshiki_cpp/dnn_detection", 10,
+    [this](const DetectedObjects::SharedPtr message) { this->publish(message); });
 
   // Camera Offset Services
   get_camera_offset_service = node->create_service<GetCameraOffset>(
@@ -80,60 +78,81 @@ GyakuenkiCppNode::GyakuenkiCppNode(
     });
 }
 
-void GyakuenkiCppNode::publish_projected_objects(const DetectedObjects::SharedPtr & message)
+void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
 {
   ProjectedObjects projected_objects;
+  MarkerArray markers;
 
+  uint8_t id = 0;
   for (const auto & detected_object : message->detected_objects) {
     try {
+      keisan::Matrix<4, 1> Pc;
       ProjectedObject projected_object =
-        this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint");
+        this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint", Pc);
 
       projected_objects.projected_objects.push_back(projected_object);
+
+      Marker marker;
+      marker.header.frame_id = "camera";
+      marker.header.stamp = node->now();
+      marker.ns = projected_object.label;
+      marker.id = id++;
+
+      if (projected_object.label == "ball") {
+        marker.type = Marker::SPHERE;
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.color.b = 0.0;
+      } else if (projected_object.label == "goalpost") {
+        marker.type = Marker::CUBE;
+        marker.color.r = 1.0;
+        marker.color.g = 1.0;
+        marker.color.b = 1.0;
+      } else if (projected_object.label == "robot") {
+        marker.type = Marker::CYLINDER;
+        marker.color.r = 0.0;
+        marker.color.g = 0.0;
+        marker.color.b = 1.0;
+      } else if (projected_object.label == "L-intersection") {
+        marker.type = Marker::LINE_LIST;
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+      } else if (projected_object.label == "T-intersection") {
+        marker.type = Marker::LINE_LIST;
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.color.b = 1.0;
+      } else if (projected_object.label == "X-intersection") {
+        marker.type = Marker::LINE_LIST;
+        marker.color.r = 1.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+      }
+
+      marker.action = Marker::ADD;
+      marker.pose.position.x = Pc[0][0];
+      marker.pose.position.y = Pc[1][0];
+      marker.pose.position.z = Pc[2][0];
+
+      marker.pose.orientation.x = 0.0;
+      marker.pose.orientation.y = 0.0;
+      marker.pose.orientation.z = 0.0;
+      marker.pose.orientation.w = 1.0;
+
+      marker.scale.x = 0.05;
+      marker.scale.y = 0.05;
+      marker.scale.z = 0.05;
+
+      marker.color.a = 1.0;
+
+      markers.markers.push_back(marker);
     } catch (std::exception & e) {
       RCLCPP_ERROR(this->node->get_logger(), e.what());
     }
   }
 
   projected_objects_publisher->publish(projected_objects);
-}
-
-void GyakuenkiCppNode::publish_point_clouds(const DetectedObjects::SharedPtr & message)
-{
-  PointCloud2 cloud_msg;
-  cloud_msg.header.frame_id = "camera";
-  cloud_msg.header.stamp = node->now();
-
-  // Define the fields of PointCloud2
-  cloud_msg.height = 1;
-  cloud_msg.is_bigendian = false;
-  cloud_msg.is_dense = true;
-
-  // Fields: x, y, z
-  sensor_msgs::PointCloud2Modifier modifier(cloud_msg);
-  modifier.setPointCloud2Fields(
-    3, "x", 1, PointField::FLOAT32, "y", 1, PointField::FLOAT32, "z", 1, PointField::FLOAT32);
-
-  sensor_msgs::PointCloud2Iterator<float> iter_x(cloud_msg, "x");
-  sensor_msgs::PointCloud2Iterator<float> iter_y(cloud_msg, "y");
-  sensor_msgs::PointCloud2Iterator<float> iter_z(cloud_msg, "z");
-
-  for (const auto & detected_object : message->detected_objects) {
-    try {
-      auto Pc = this->ipm->get_camera_frame_points(detected_object, IPM::TYPE_DNN);
-
-      *iter_x = Pc[0][0];
-      *iter_y = Pc[1][0];
-      *iter_z = Pc[2][0];
-
-      ++iter_x;
-      ++iter_y;
-      ++iter_z;
-    } catch (std::exception & e) {
-      RCLCPP_WARN(this->node->get_logger(), e.what());
-    }
-  }
-
-  point_cloud_publisher->publish(cloud_msg);
+  markers_publisher->publish(markers);
 }
 }  // namespace gyakuenki_cpp
