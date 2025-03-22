@@ -22,7 +22,7 @@ find_package(rclcpp REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(jitsuyo REQUIRED)
@@ -31,7 +31,7 @@ find_package(ninshiki_interfaces REQUIRED)
 find_package(gyakuenki_interfaces REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
-  "src/${PROJECT_NAME}/node/gyakuenki_cpp_node"
+  "src/${PROJECT_NAME}/node/gyakuenki_cpp_node.cpp"
   "src/${PROJECT_NAME}/projections/ipm.cpp"
   "src/${PROJECT_NAME}/utils/camera_info.cpp")
 
@@ -40,7 +40,7 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2
   tf2_ros
   tf2_geometry_msgs
-  sensor_msgs
+  visualization_msgs
   geometry_msgs
   OpenCV
   jitsuyo
@@ -80,7 +80,7 @@ ament_export_dependencies(
   tf2
   tf2_ros
   tf2_geometry_msgs
-  sensor_msgs
+  visualization_msgs
   geometry_msgs
   OpenCV
   jitsuyo
