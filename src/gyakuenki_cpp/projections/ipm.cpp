@@ -181,7 +181,8 @@ cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object, int de
       break;
     case TYPE_COLOR:
       if (detected_object.label == "ball") {
-        // TODO: This should be received from soccer node
+        point.x = detected_object.left + detected_object.right / 2;
+        point.y = detected_object.top + detected_object.bottom / 2;
       }
 
       break;

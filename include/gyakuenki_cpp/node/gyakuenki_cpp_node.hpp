@@ -34,6 +34,7 @@
 #include "gyakuenki_interfaces/msg/projected_objects.hpp"
 #include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
+#include "ninshiki_interfaces/msg/detected_object.hpp"
 #include "ninshiki_interfaces/msg/detected_objects.hpp"
 
 namespace gyakuenki_cpp
@@ -44,6 +45,7 @@ class GyakuenkiCppNode
 public:
   using MarkerArray = visualization_msgs::msg::MarkerArray;
   using Marker = visualization_msgs::msg::Marker;
+  using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
   using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
   using ProjectedObjects = gyakuenki_interfaces::msg::ProjectedObjects;
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
@@ -63,7 +65,9 @@ private:
   rclcpp::Publisher<MarkerArray>::SharedPtr markers_publisher;
 
   rclcpp::Publisher<ProjectedObjects>::SharedPtr projected_objects_publisher;
+  rclcpp::Publisher<ProjectedObjects>::SharedPtr projected_objects_color_publisher;
   rclcpp::Subscription<DetectedObjects>::SharedPtr dnn_detection_subscriber;
+  rclcpp::Subscription<DetectedObject>::SharedPtr color_ball_detection_subscriber;
 
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
