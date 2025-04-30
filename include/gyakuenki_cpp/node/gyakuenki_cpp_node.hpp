@@ -65,9 +65,9 @@ private:
   rclcpp::Publisher<MarkerArray>::SharedPtr markers_publisher;
 
   rclcpp::Publisher<ProjectedObjects>::SharedPtr projected_objects_publisher;
-  rclcpp::Publisher<ProjectedObjects>::SharedPtr projected_objects_color_publisher;
+  rclcpp::Publisher<ProjectedObject>::SharedPtr projected_ball_publisher;
   rclcpp::Subscription<DetectedObjects>::SharedPtr dnn_detection_subscriber;
-  rclcpp::Subscription<DetectedObject>::SharedPtr color_ball_detection_subscriber;
+  rclcpp::Subscription<DetectedObject>::SharedPtr ball_detection_subscriber;
 
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
