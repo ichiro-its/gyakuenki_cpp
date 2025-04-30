@@ -54,8 +54,6 @@ public:
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
   using Quaternion = geometry_msgs::msg::Quaternion;
 
-  enum { TYPE_DNN, TYPE_COLOR };
-
   IPM(
     const std::shared_ptr<rclcpp::Node> & node, const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
     const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path);
@@ -65,7 +63,7 @@ public:
   void set_config(double x, double y, double z, double roll, double pitch, double yaw);
   void save_config();
 
-  bool object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type);
+  bool object_at_bottom_of_image(const DetectedObject & detected_object);
   void normalize_pixel(cv::Point2d & pixel);
   void undistort_pixel(cv::Point2d & pixel);
 
@@ -77,12 +75,11 @@ public:
     const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
     const std::string & object_label);
 
-  cv::Point2d get_target_pixel(const DetectedObject & detected_object, int detection_type);
-  cv::Point2d get_normalized_target_pixel(
-    const DetectedObject & detected_object, int detection_type);
+  cv::Point2d get_target_pixel(const DetectedObject & detected_object);
+  cv::Point2d get_normalized_target_pixel(const DetectedObject & detected_object);
 
   gyakuenki_interfaces::msg::ProjectedObject map_object(
-    const DetectedObject & detected_object, int detection_type, const std::string & output_frame,
+    const DetectedObject & detected_object, const std::string & output_frame,
     keisan::Matrix<4, 1> & Pc);
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }

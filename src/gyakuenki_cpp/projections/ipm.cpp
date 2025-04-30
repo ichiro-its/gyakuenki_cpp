@@ -115,7 +115,7 @@ void IPM::save_config()
 }
 
 // Check if the bottom bounding box is at the bottom of the image
-bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object, int detection_type)
+bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object)
 {
   // TODO: Handle for color detection
   return detected_object.bottom >
@@ -160,45 +160,30 @@ void IPM::undistort_pixel(cv::Point2d & pixel)
   pixel.y = y * radial_distortion + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y;
 }
 
-// Get the target pixel (i. e. u and v) that are going to be projected depending on the object and detection type
-cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object, int detection_type)
+// Get the target pixel (i. e. u and v) that are going to be projected depending on the object
+cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
 {
   cv::Point2d point;
 
-  switch (detection_type) {
-    case TYPE_DNN:
-      // u is the center of the detection
-      point.x = detected_object.left + detected_object.right / 2;
+  // u is the center of the detection
+  point.x = detected_object.left + detected_object.right / 2;
 
-      // For goalpost and robot, v is the bottom of the detection
-      // Ball and field marks, v is the center of the detection
-      if (detected_object.label == "goalpost" || detected_object.label == "robot") {
-        point.y = detected_object.bottom;
-      } else {
-        point.y = detected_object.top + detected_object.bottom / 2;
-      }
-
-      break;
-    case TYPE_COLOR:
-      if (detected_object.label == "ball") {
-        point.x = detected_object.left + detected_object.right / 2;
-        point.y = detected_object.top + detected_object.bottom / 2;
-      }
-
-      break;
-    default:
-      throw std::runtime_error("Invalid detection type");
+  // For goalpost and robot, v is the bottom of the detection
+  // Ball and field marks, v is the center of the detection
+  if (detected_object.label == "goalpost" || detected_object.label == "robot") {
+    point.y = detected_object.bottom;
+  } else {
+    point.y = detected_object.top + detected_object.bottom / 2;
   }
 
   return point;
 }
 
 // Get the object's normalized XY coordinates in image plane
-cv::Point2d IPM::get_normalized_target_pixel(
-  const DetectedObject & detected_object, int detection_type)
+cv::Point2d IPM::get_normalized_target_pixel(const DetectedObject & detected_object)
 {
   // Get the target pixel that are going to be projected (i. e. u and v)
-  cv::Point2d pixel = get_target_pixel(detected_object, detection_type);
+  cv::Point2d pixel = get_target_pixel(detected_object);
 
   normalize_pixel(pixel);
 
@@ -275,8 +260,7 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
 gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
-  const DetectedObject & detected_object, int detection_type, const std::string & output_frame,
-  keisan::Matrix<4, 1> & Pc)
+  const DetectedObject & detected_object, const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
 {
   // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
   // p = K * [R | T] * Pw
@@ -285,12 +269,12 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   // The idea is to reverse this process to get the 3D world points from the 2D image points
 
   // We can not map the object if the bounding box touches the bottom of the image
-  if (object_at_bottom_of_image(detected_object, detection_type)) {
+  if (object_at_bottom_of_image(detected_object)) {
     throw std::runtime_error("Bounding box touches the bottom of the image, can not map object!");
   }
 
   // First, get the normalized target pixel
-  cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object, detection_type);
+  cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object);
 
   // Get the latest transform (Rotation and Translation) from the camera to the output frame
   geometry_msgs::msg::TransformStamped t;

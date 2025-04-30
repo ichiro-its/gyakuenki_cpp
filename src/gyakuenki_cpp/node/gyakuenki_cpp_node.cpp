@@ -53,7 +53,7 @@ GyakuenkiCppNode::GyakuenkiCppNode(
       try {
         keisan::Matrix<4, 1> Pc;
         ProjectedObject projected_ball =
-          this->ipm->map_object(*message, IPM::TYPE_COLOR, "base_footprint", Pc);
+          this->ipm->map_object(*message, "base_footprint", Pc);
         projected_ball_publisher->publish(projected_ball);
       } catch (std::exception & e) {
         RCLCPP_ERROR(this->node->get_logger(), e.what());
@@ -105,7 +105,7 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
     try {
       keisan::Matrix<4, 1> Pc;
       ProjectedObject projected_object =
-        this->ipm->map_object(detected_object, IPM::TYPE_DNN, "base_footprint", Pc);
+        this->ipm->map_object(detected_object, "base_footprint", Pc);
 
       projected_objects.projected_objects.push_back(projected_object);
 
