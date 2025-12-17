@@ -54,6 +54,36 @@ GyakuenkiCppNode::GyakuenkiCppNode(
         keisan::Matrix<4, 1> Pc;
         ProjectedObject projected_ball =
           this->ipm->map_object(*message, "base_footprint", Pc);
+
+        rclcpp::Time now = this->node->now();
+
+        if (!ball_initialized_) {
+          ball_ekf_.init(Pc[0][0], Pc[1][0]);
+          last_ball_time_ = now;
+          ball_initialized_ = true;
+          return;
+        }
+
+        double dt = (now - last_ball_time_).seconds();
+        last_ball_time_ = now;
+
+        if (dt <= 0.0) {
+          return;
+        }
+
+        ball_ekf_.predict(dt);
+
+        keisan::Matrix<2,1> z;
+        z[0][0] = Pc[0][0];
+        z[1][0] = Pc[1][0];
+
+        ball_ekf_.update(z);
+
+        auto X = ball_ekf_.getstate();
+
+        projected_ball.position.x = X[0][0];
+        projected_ball.position.y = X[1][0];
+
         projected_ball_publisher->publish(projected_ball);
       } catch (std::exception & e) {
         RCLCPP_ERROR(this->node->get_logger(), e.what());

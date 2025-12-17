@@ -36,6 +36,7 @@
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 #include "ninshiki_interfaces/msg/detected_objects.hpp"
+#include "keisan/ekf/ekf_ball.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -71,6 +72,10 @@ private:
 
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
+
+  keisan::ekf_ball ball_ekf_;
+  bool ball_initialized_ = false;
+  rclcpp::Time last_ball_time_;
 };
 
 }  // namespace gyakuenki_cpp
