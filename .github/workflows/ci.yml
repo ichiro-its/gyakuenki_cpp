@@ -12,10 +12,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
         with:
-          path: hurocup
+          path: src/gyakuenki_cpp
+
+      - name: Import Gyakuenki Repos
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3-pip
+          pip3 install --user vcstool
+          cd src
+          vcs import < gyakuenki_cpp/gyakuenki.repos
 
       - name: Setup workspace
         uses: ichiro-its/ros2-ws-action/setup@v1.0.1
+        with:
+          distro: jazzy
 
       - name: Build workspace
         uses: ichiro-its/ros2-ws-action/build@v1.0.1
