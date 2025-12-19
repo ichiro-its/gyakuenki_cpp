@@ -79,10 +79,10 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
         ball_ekf_.update(z);
 
-        auto X = ball_ekf_.getstate();
+        auto pos = ball_ekf_.getPosition();
 
-        projected_ball.position.x = X[0][0];
-        projected_ball.position.y = X[1][0];
+        projected_ball.position.x = pos(0,0);
+        projected_ball.position.y = pos(1,0);
 
         projected_ball_publisher->publish(projected_ball);
       } catch (std::exception & e) {
