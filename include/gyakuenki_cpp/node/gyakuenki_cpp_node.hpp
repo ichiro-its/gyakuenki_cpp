@@ -34,9 +34,9 @@
 #include "gyakuenki_interfaces/msg/projected_objects.hpp"
 #include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
+#include "keisan/ekf/ekf_ball.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 #include "ninshiki_interfaces/msg/detected_objects.hpp"
-#include "keisan/ekf/ekf_ball.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -45,9 +45,9 @@ class GyakuenkiCppNode
 {
 public:
   using MarkerArray = visualization_msgs::msg::MarkerArray;
-  using Marker = visualization_msgs::msg::Marker;
+  using Marker = visualization_m using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
+  sgs::msg::Marker;
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
-  using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
   using ProjectedObjects = gyakuenki_interfaces::msg::ProjectedObjects;
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
   using GetCameraOffset = gyakuenki_interfaces::srv::GetCameraOffset;
