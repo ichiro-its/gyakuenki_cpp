@@ -93,6 +93,31 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
       response->status = true;
     });
+
+  // Publisher for visualizing the corrected camera pose in RViz
+  corrected_camera_publisher = node->create_publisher<geometry_msgs::msg::PoseStamped>(
+    "gyakuenki_cpp/corrected_camera_pose", 10);
+
+  node_timer = node->create_wall_timer(
+    std::chrono::milliseconds(100), [this]() {
+      try {
+        tf2::Transform tf_final = ipm->get_corrected_camera_transform("base_footprint");
+
+        geometry_msgs::msg::PoseStamped camera_pose;
+        camera_pose.header.stamp = this->node->get_clock()->now();
+        camera_pose.header.frame_id = "base_footprint";
+        camera_pose.pose.position.x = tf_final.getOrigin().x();
+        camera_pose.pose.position.y = tf_final.getOrigin().y();
+        camera_pose.pose.position.z = tf_final.getOrigin().z();
+        camera_pose.pose.orientation = ipm->tf2_to_msg(tf_final.getRotation());
+
+        corrected_camera_publisher->publish(camera_pose);
+
+      } catch (const std::exception & ex) {
+        RCLCPP_WARN(this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());
+      }
+    }
+  );
 }
 
 void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)

@@ -78,6 +78,8 @@ public:
   cv::Point2d get_target_pixel(const DetectedObject & detected_object);
   cv::Point2d get_normalized_target_pixel(const DetectedObject & detected_object);
 
+  tf2::Transform get_corrected_camera_transform(const std::string & output_frame);
+
   gyakuenki_interfaces::msg::ProjectedObject map_object(
     const DetectedObject & detected_object, const std::string & output_frame,
     keisan::Matrix<4, 1> & Pc);
@@ -91,6 +93,7 @@ private:
 
   utils::CameraInfo camera_info;
   CameraOffset camera_offset;
+  tf2::Vector3 translation_offset;
   tf2::Quaternion rotation_offset;
 };
 

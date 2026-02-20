@@ -26,6 +26,7 @@
 
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
@@ -71,6 +72,10 @@ private:
 
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
+
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr corrected_camera_publisher;
+
+  rclcpp::TimerBase::SharedPtr node_timer;
 };
 
 }  // namespace gyakuenki_cpp

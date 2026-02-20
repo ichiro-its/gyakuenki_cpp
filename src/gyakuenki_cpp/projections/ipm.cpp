@@ -46,6 +46,9 @@ void IPM::load_config(const std::string & path)
   double roll_double;
   double pitch_double;
   double yaw_double;
+  double x_double;
+  double y_double;
+  double z_double;
 
   nlohmann::json rotation_offset_section;
   if (jitsuyo::assign_val(config, "rotation_offset", rotation_offset_section)) {
@@ -61,19 +64,12 @@ void IPM::load_config(const std::string & path)
     valid_config = false;
   }
 
-  camera_offset.roll = keisan::make_degree(roll_double);
-  camera_offset.pitch = keisan::make_degree(pitch_double);
-  camera_offset.yaw = keisan::make_degree(yaw_double);
-
-  rotation_offset.setRPY(
-    camera_offset.roll.radian(), camera_offset.pitch.radian(), camera_offset.yaw.radian());
-
   nlohmann::json position_offset_section;
   if (jitsuyo::assign_val(config, "position_offset", position_offset_section)) {
     bool valid_section = true;
-    valid_section &= jitsuyo::assign_val(position_offset_section, "x", camera_offset.position.x);
-    valid_section &= jitsuyo::assign_val(position_offset_section, "y", camera_offset.position.y);
-    valid_section &= jitsuyo::assign_val(position_offset_section, "z", camera_offset.position.z);
+    valid_section &= jitsuyo::assign_val(position_offset_section, "x", x_double);
+    valid_section &= jitsuyo::assign_val(position_offset_section, "y", y_double);
+    valid_section &= jitsuyo::assign_val(position_offset_section, "z", z_double);
     if (!valid_section) {
       std::cout << "Error found at section `position_offset`" << std::endl;
       valid_config = false;
@@ -81,6 +77,8 @@ void IPM::load_config(const std::string & path)
   } else {
     valid_config = false;
   }
+
+  set_config(x_double, y_double, z_double, roll_double, pitch_double, yaw_double);
 
   if (!valid_config) {
     throw std::runtime_error("Failed to set configuration file `camera_offset.json`");
@@ -95,6 +93,8 @@ void IPM::set_config(double x, double y, double z, double roll, double pitch, do
   camera_offset.roll = keisan::make_degree(roll);
   camera_offset.pitch = keisan::make_degree(pitch);
   camera_offset.yaw = keisan::make_degree(yaw);
+
+  translation_offset.setValue(x, y, z);
   rotation_offset.setRPY(
     camera_offset.roll.radian(), camera_offset.pitch.radian(), camera_offset.yaw.radian());
 }
@@ -258,6 +258,47 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   return Pc;
 }
 
+// Apply the camera translation and rotation offset to the transform from camera frame
+// to output frame (e. g. base_footprint) and return the corrected transform
+// Apply offset:
+// T_final = T_base_to_cam * T_offset
+// Also can be done by:
+// - Apply rotation: R_final = R_base_to_cam * R_offset
+// - Apply translation: t_final = R_base_to_cam * t_offset + t_base_to_cam
+tf2::Transform IPM::get_corrected_camera_transform(const std::string & output_frame)
+{
+  // Get the latest transform (Rotation and Translation) from the camera to the output frame
+  geometry_msgs::msg::TransformStamped t;
+  try {
+    t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+  } catch (tf2::TransformException & ex) {
+    throw std::runtime_error(ex.what());
+  }
+
+  // Build TF from base to camera
+  tf2::Transform tf_base_to_cam;
+
+  tf2::Quaternion q_base_cam = msg_to_tf2(t.transform.rotation);
+
+  tf_base_to_cam.setOrigin(
+    tf2::Vector3(
+      t.transform.translation.x,
+      t.transform.translation.y,
+      t.transform.translation.z));
+
+  tf_base_to_cam.setRotation(q_base_cam);
+
+  // Build offset transform
+  tf2::Transform tf_offset;
+  tf_offset.setOrigin(translation_offset);
+  tf_offset.setRotation(rotation_offset);
+
+  // Apply offset: T_final = T_base_cam * T_offset
+  tf2::Transform tf_final = tf_base_to_cam * tf_offset;
+
+  return tf_final;
+}
+
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
 gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   const DetectedObject & detected_object, const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
@@ -276,23 +317,22 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   // First, get the normalized target pixel
   cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object);
 
-  // Get the latest transform (Rotation and Translation) from the camera to the output frame
-  geometry_msgs::msg::TransformStamped t;
-  try {
-    t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
-  } catch (tf2::TransformException & ex) {
-    throw std::runtime_error(ex.what());
-  }
+  // Get the camera transform with offset applied expressed in output_frame (e. g. base_footprint)
+  tf2::Transform tf_final = get_corrected_camera_transform(output_frame);
+
+  // Extract the rotation and translation from the final transform
+  tf2::Quaternion q_final = tf_final.getRotation();
+  tf2::Vector3 t_final = tf_final.getOrigin();
 
   // Convert the quaternion to rotation matrix R
   keisan::Matrix<4, 4> R =
-    quat_to_rotation_matrix(tf2_to_msg(msg_to_tf2(t.transform.rotation) * rotation_offset));
+    quat_to_rotation_matrix(tf2_to_msg(q_final));
 
   // Get the translation matrix
   keisan::Matrix<4, 4> T = keisan::translation_matrix(keisan::Point3(
-    t.transform.translation.x + camera_offset.position.x,
-    t.transform.translation.y + camera_offset.position.y,
-    t.transform.translation.z + camera_offset.position.z));
+    t_final.x(),
+    t_final.y(),
+    t_final.z()));
 
   // Now, we have the 3D point in camera frame
   Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
