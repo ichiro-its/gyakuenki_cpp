@@ -265,14 +265,33 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 // Also can be done by:
 // - Apply rotation: R_final = R_base_to_cam * R_offset
 // - Apply translation: t_final = R_base_to_cam * t_offset + t_base_to_cam
-tf2::Transform IPM::get_corrected_camera_transform(const std::string & output_frame)
+tf2::Transform IPM::get_corrected_camera_transform(
+  const std::string & output_frame, const rclcpp::Time & timestamp)
 {
-  // Get the latest transform (Rotation and Translation) from the camera to the output frame
+  // Get the transform from the camera frame to the output frame at the timestamp when
+  // the image was captured
   geometry_msgs::msg::TransformStamped t;
   try {
-    t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
-  } catch (tf2::TransformException & ex) {
-    throw std::runtime_error(ex.what());
+    if (timestamp.nanoseconds() == 0) {
+      t = tf_buffer->lookupTransform(
+        output_frame,
+        camera_info.frame_id,
+        tf2::TimePointZero);
+    } else {
+      t = tf_buffer->lookupTransform(
+        output_frame,
+        camera_info.frame_id,
+        timestamp,
+        tf2::Duration::zero()
+      );
+    }
+  } catch (tf2::TransformException &) {
+    try {
+      t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+      RCLCPP_WARN(node->get_logger(), "TF not available for capture timestamp, using latest TF");
+    } catch (tf2::TransformException & ex) {
+      throw std::runtime_error(ex.what());
+    }
   }
 
   // Build TF from base to camera
@@ -301,7 +320,8 @@ tf2::Transform IPM::get_corrected_camera_transform(const std::string & output_fr
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
 gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
-  const DetectedObject & detected_object, const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
+  const DetectedObject & detected_object, const rclcpp::Time & timestamp,
+  const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
 {
   // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
   // p = K * [R | T] * Pw
@@ -318,7 +338,7 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object);
 
   // Get the camera transform with offset applied expressed in output_frame (e. g. base_footprint)
-  tf2::Transform tf_final = get_corrected_camera_transform(output_frame);
+  tf2::Transform tf_final = get_corrected_camera_transform(output_frame, timestamp);
 
   // Extract the rotation and translation from the final transform
   tf2::Quaternion q_final = tf_final.getRotation();
