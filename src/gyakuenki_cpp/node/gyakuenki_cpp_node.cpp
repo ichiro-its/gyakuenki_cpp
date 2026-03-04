@@ -20,6 +20,8 @@
 
 #include "gyakuenki_cpp/node/gyakuenki_cpp_node.hpp"
 
+using namespace std::chrono_literals;
+
 namespace gyakuenki_cpp
 {
 
@@ -53,7 +55,7 @@ GyakuenkiCppNode::GyakuenkiCppNode(
       try {
         keisan::Matrix<4, 1> Pc;
         ProjectedObject projected_ball =
-          this->ipm->map_object(*message, "base_footprint", Pc);
+          this->ipm->map_object(*message, rclcpp::Time(0), "base_footprint", Pc);
         projected_ball_publisher->publish(projected_ball);
       } catch (std::exception & e) {
         RCLCPP_ERROR(this->node->get_logger(), e.what());
@@ -93,6 +95,29 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
       response->status = true;
     });
+
+  // Publisher for visualizing the corrected camera pose in RViz
+  corrected_camera_publisher = node->create_publisher<geometry_msgs::msg::PoseStamped>(
+    "gyakuenki_cpp/corrected_camera_pose", 10);
+
+  node_timer = node->create_wall_timer(8ms, [this]() {
+    try {
+      tf2::Transform tf_final = ipm->get_corrected_camera_transform("base_footprint", rclcpp::Time(0));
+
+      geometry_msgs::msg::PoseStamped camera_pose;
+      camera_pose.header.stamp = this->node->get_clock()->now();
+      camera_pose.header.frame_id = "base_footprint";
+      camera_pose.pose.position.x = tf_final.getOrigin().x();
+      camera_pose.pose.position.y = tf_final.getOrigin().y();
+      camera_pose.pose.position.z = tf_final.getOrigin().z();
+      camera_pose.pose.orientation = ipm->tf2_to_msg(tf_final.getRotation());
+
+      corrected_camera_publisher->publish(camera_pose);
+
+    } catch (const std::exception & ex) {
+      RCLCPP_WARN(this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());
+    }
+  });
 }
 
 void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
@@ -105,7 +130,7 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
     try {
       keisan::Matrix<4, 1> Pc;
       ProjectedObject projected_object =
-        this->ipm->map_object(detected_object, "base_footprint", Pc);
+        this->ipm->map_object(detected_object, message->header.stamp, "base_footprint", Pc);
 
       projected_objects.projected_objects.push_back(projected_object);
 
