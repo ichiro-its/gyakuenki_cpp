@@ -48,18 +48,20 @@ GyakuenkiCppNode::GyakuenkiCppNode(
     [this](const DetectedObjects::SharedPtr message) { this->publish(message); });
 
   ball_detection_subscriber = node->create_subscription<DetectedObject>(
-    "soccer/ball_detection", 10,
-    [this](const DetectedObject::SharedPtr message) {
+    "soccer/ball_detection", 10, [this](const DetectedObject::SharedPtr message) {
       try {
         keisan::Matrix<4, 1> Pc;
-        ProjectedObject projected_ball =
-          this->ipm->map_object(*message, "base_footprint", Pc);
+        ProjectedObject projected_ball = this->ipm->map_object(*message, "base_footprint", Pc);
+
+        rclcpp::Time now = this->node->now();
+
+        auto filtered_ball = ball_tracker_->process(Pc, projected_ball, node->now());
+
         projected_ball_publisher->publish(projected_ball);
       } catch (std::exception & e) {
         RCLCPP_ERROR(this->node->get_logger(), e.what());
       }
-    }
-  );
+    });
 
   // Camera Offset Services
   get_camera_offset_service = node->create_service<GetCameraOffset>(
