@@ -30,11 +30,11 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 
 #include "gyakuenki_cpp/projections/ipm.hpp"
+#include "gyakuenki_cpp/tracking/ekf.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "gyakuenki_interfaces/msg/projected_objects.hpp"
 #include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
-#include "keisan/ekf/ekf_ball.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 #include "ninshiki_interfaces/msg/detected_objects.hpp"
 
@@ -45,8 +45,8 @@ class GyakuenkiCppNode
 {
 public:
   using MarkerArray = visualization_msgs::msg::MarkerArray;
-  using Marker = visualization_m using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
-  sgs::msg::Marker;
+  using Marker = visualization_msgs::msg::Marker;
+  using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
   using ProjectedObjects = gyakuenki_interfaces::msg::ProjectedObjects;
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
@@ -73,9 +73,7 @@ private:
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
 
-  keisan::ekf_ball ball_ekf_;
-  bool ball_initialized_ = false;
-  rclcpp::Time last_ball_time_;
+  std::shared_ptr<BallTracker> ball_tracker_;
 };
 
 }  // namespace gyakuenki_cpp

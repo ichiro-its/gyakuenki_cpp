@@ -1,4 +1,4 @@
-#include "gyakuenki_cpp/tracking/ball_tracker.hpp"
+#include "gyakuenki_cpp/tracking/ekf.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -13,7 +13,7 @@ gyakuenki_interfaces::msg::ProjectedObject BallTracker::process(
 
   // First detection
   if (!ball_initialized_) {
-    ball_ekf_.init(Pc[0][0], Pc[1][0]);
+    ball_ekf_.init(Pc[0][0], Pc[1][0], 0.0, 0.0);
     last_ball_time_ = now;
     ball_initialized_ = true;
     return output;
@@ -38,8 +38,8 @@ gyakuenki_interfaces::msg::ProjectedObject BallTracker::process(
 
   auto pos = ball_ekf_.getPosition();
 
-  output.position.x = pos(0, 0);
-  output.position.y = pos(1, 0);
+  output.position.x = pos[0][0];
+  output.position.y = pos[1][0];
 
   return output;
 }

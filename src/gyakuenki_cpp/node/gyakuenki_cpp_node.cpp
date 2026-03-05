@@ -34,6 +34,8 @@ GyakuenkiCppNode::GyakuenkiCppNode(
   tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
 
   ipm = std::make_shared<IPM>(node, tf_buffer, tf_listener, config_path);
+  
+  ball_tracker_ = std::make_shared<BallTracker>();
 
   projected_objects_publisher =
     node->create_publisher<ProjectedObjects>("gyakuenki_cpp/projected_objects", 10);
@@ -55,9 +57,9 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
         rclcpp::Time now = this->node->now();
 
-        auto filtered_ball = ball_tracker_->process(Pc, projected_ball, node->now());
+        auto filtered_ball = ball_tracker_->process(Pc, projected_ball, this->node->now());
 
-        projected_ball_publisher->publish(projected_ball);
+        projected_ball_publisher->publish(filtered_ball); 
       } catch (std::exception & e) {
         RCLCPP_ERROR(this->node->get_logger(), e.what());
       }

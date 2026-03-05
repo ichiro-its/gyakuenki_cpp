@@ -2,9 +2,9 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "gyakuenki_cpp/tracking/ekf.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
-#include "keisan/matrix.hpp"
+#include "keisan/matrix/matrix.hpp"
+#include "keisan/ekf/ekf_ball.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -21,7 +21,7 @@ public:
 private:
   bool ball_initialized_;
   rclcpp::Time last_ball_time_;
-  BallEKF ball_ekf_;
+  keisan::ekf_ball ball_ekf_; 
 };
 
 }  // namespace gyakuenki_cpp

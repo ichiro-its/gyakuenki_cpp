@@ -33,7 +33,8 @@ find_package(gyakuenki_interfaces REQUIRED)
 add_library(${PROJECT_NAME} SHARED
   "src/${PROJECT_NAME}/node/gyakuenki_cpp_node.cpp"
   "src/${PROJECT_NAME}/projections/ipm.cpp"
-  "src/${PROJECT_NAME}/utils/camera_info.cpp")
+  "src/${PROJECT_NAME}/utils/camera_info.cpp"
+  "src/${PROJECT_NAME}/tracking/ekf.cpp")
 
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
@@ -66,8 +67,26 @@ target_include_directories(main PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(main ${PROJECT_NAME})
 
+add_executable(ekf_test_node 
+  "src/ekf_test_main.cpp" 
+  "src/gyakuenki_cpp/node/ekf_test_node.cpp"
+)
+target_include_directories(ekf_test_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(ekf_test_node ${PROJECT_NAME})
+ament_target_dependencies(ekf_test_node
+  rclcpp
+  tf2_ros
+  visualization_msgs
+  ninshiki_interfaces
+  gyakuenki_interfaces
+  keisan
+)
+
 install(TARGETS
   main
+  ekf_test_node
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

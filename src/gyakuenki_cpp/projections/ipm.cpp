@@ -166,14 +166,14 @@ cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
   cv::Point2d point;
 
   // u is the center of the detection
-  point.x = detected_object.left + detected_object.right / 2;
+  point.x = detected_object.left + detected_object.right / 2; // maybe should be (detected_object.left + detected_object.right) / 2
 
   // For goalpost and robot, v is the bottom of the detection
   // Ball and field marks, v is the center of the detection
   if (detected_object.label == "goalpost" || detected_object.label == "robot") {
     point.y = detected_object.bottom;
   } else {
-    point.y = detected_object.top + detected_object.bottom / 2;
+    point.y = detected_object.top + detected_object.bottom / 2; // maybe should be (detected_object.top + detected_object.bottom) / 2
   }
 
   return point;
