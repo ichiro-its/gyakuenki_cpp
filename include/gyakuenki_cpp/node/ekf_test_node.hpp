@@ -24,6 +24,8 @@ namespace gyakuenki_cpp
 class EkfTestNode
 {
 public:
+  using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
+  
   EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path);
 
 private:

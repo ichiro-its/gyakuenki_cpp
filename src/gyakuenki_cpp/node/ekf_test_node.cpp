@@ -42,15 +42,21 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
   }
 
   if (!ball_found) return;
+  // todo:
+  // implement prediksi letak bola 3 detik ke depan
+  // init ulang kalau lost ball > 10 secs dan nemu bola
+  // tuning Q & R
+  // selama lost ball, tetep predict sm update dan gambar ke ichiro app
 
   try {
     keisan::Matrix<4, 1> Pc;
-    ipm->map_object(best_ball, "base_footprint", Pc);
+    ProjectedObject projected_ball =
+        this->ipm->map_object(best_ball, "base_footprint", Pc);
 
     rclcpp::Time now = node->now();
     
     if (!ball_initialized_) {
-      ball_ekf_.init(Pc[0][0], Pc[1][0], 0.0, 0.0);
+      ball_ekf_.init(projected_ball.position.x, projected_ball.position.y, 0.0, 0.0); // tambah Q R
       last_ball_time_ = now;
       ball_initialized_ = true;
       return;
@@ -63,8 +69,8 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
       ball_ekf_.predict(dt);
 
       keisan::Matrix<2, 1> z;
-      z[0][0] = Pc[0][0];
-      z[1][0] = Pc[1][0];
+      z[0][0] = projected_ball.position.x;
+      z[1][0] = projected_ball.position.y;
       ball_ekf_.update(z);
     }
 
@@ -81,20 +87,25 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
     
     double shadow_x = x_curr;
     double shadow_y = y_curr;
+    double stop_distance = 0.0;
     
     if (v_mag > 0.05 && grass_friction_ > 0.0) {
       double gravity = 9.81;
       double acceleration = grass_friction_ * gravity;
-      double stop_distance = (v_mag * v_mag) / (2.0 * acceleration);
+      stop_distance = (v_mag * v_mag) / (2.0 * acceleration);
       
       shadow_x = x_curr + stop_distance * (vx / v_mag);
       shadow_y = y_curr + stop_distance * (vy / v_mag);
     }
 
-    // MEMBUNGKUS DATA KE DALAM FORMAT ARRAY UNTUK WEBSITE
+    RCLCPP_INFO(node->get_logger(), "\n--- [EKF BALL TRACKING DEBUG] ---");
+    RCLCPP_INFO(node->get_logger(), "1. Mentah (IPM) : X=%.3f, Y=%.3f", projected_ball.position.x, projected_ball.position.y);
+    RCLCPP_INFO(node->get_logger(), "2. Halus (EKF)  : X=%.3f, Y=%.3f | Kecepatan = %.3f m/s", x_curr, y_curr, v_mag);
+    RCLCPP_INFO(node->get_logger(), "3. Titik Henti  : X=%.3f, Y=%.3f | Jarak Luncur = %.3f m", shadow_x, shadow_y, stop_distance);
+    RCLCPP_INFO(node->get_logger(), "---------------------------------");
+
     gyakuenki_interfaces::msg::ProjectedObjects published_objects;
 
-    // 1. Masukkan Bola Utama (Gunakan label "ball" agar dikenali otomatis oleh website)
     gyakuenki_interfaces::msg::ProjectedObject filtered_ball;
     filtered_ball.label = "ball"; 
     filtered_ball.position.x = x_curr;
@@ -103,7 +114,6 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
     filtered_ball.confidence = max_confidence;
     published_objects.projected_objects.push_back(filtered_ball);
 
-    // 2. Masukkan Bayangan Bola 
     gyakuenki_interfaces::msg::ProjectedObject shadow_ball;
     shadow_ball.label = "shadow_ball";
     shadow_ball.position.x = shadow_x;
@@ -112,10 +122,8 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
     shadow_ball.confidence = max_confidence;
     published_objects.projected_objects.push_back(shadow_ball);
 
-    // Publish array sekaligus
     projected_objects_publisher->publish(published_objects);
 
-    // VISUALISASI RVIZ (Tetap dipertahankan untuk debugging)
     visualization_msgs::msg::MarkerArray markers;
     
     visualization_msgs::msg::Marker m_ekf;
