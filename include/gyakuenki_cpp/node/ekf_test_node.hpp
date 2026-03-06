@@ -48,6 +48,8 @@ private:
   rclcpp::Time last_ball_time_;
 
   double grass_friction_;
+
+  double lost_ball_duration = 0.0;
 };
 
 }  // namespace gyakuenki_cpp
