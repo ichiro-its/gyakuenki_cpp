@@ -6,9 +6,12 @@ namespace gyakuenki_cpp
 {
 
 EkfTestNode::EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
-: node(node), ball_initialized_(false)
+: node(node), ball_initialized_(false), lost_ball_duration(0.0)
 {
   node->declare_parameter("grass_friction", 0.15);
+  node->declare_parameter("ekf_q_pos", 1e-3);
+  node->declare_parameter("ekf_q_vel", 1e-2);
+  node->declare_parameter("ekf_r_pos", 0.01);
 
   tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
   tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
@@ -50,6 +53,14 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
     }
   }
 
+  double q_pos, q_vel, r_pos;
+  node->get_parameter("ekf_q_pos", q_pos);
+  node->get_parameter("ekf_q_vel", q_vel);
+  node->get_parameter("ekf_r_pos", r_pos);
+
+  ball_ekf_.setQ(q_pos, q_vel, 0.001);
+  ball_ekf_.setR(r_pos);
+
   if (!ball_found) {
     if (!ball_initialized_) return;
 
@@ -62,13 +73,13 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
 
     keisan::Matrix<4, 1> Pc;
     ProjectedObject projected_ball =
-        this->ipm->map_object(best_ball, "base_footprint", Pc);
+        this->ipm->map_object(best_ball, message->header.stamp, "base_footprint", Pc);
 
     raw_x = projected_ball.position.x;
     raw_y = projected_ball.position.y;
     
     if (!ball_initialized_) {
-      ball_ekf_.init(raw_x, raw_y, 0.0, 0.0); // tambah Q R
+      ball_ekf_.init(raw_x, raw_y, 0.0, 0.0);
       last_ball_time_ = now;
       ball_initialized_ = true;
       return;
