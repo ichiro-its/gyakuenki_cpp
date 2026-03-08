@@ -53,7 +53,7 @@ GyakuenkiCppNode::GyakuenkiCppNode(
     "soccer/ball_detection", 10, [this](const DetectedObject::SharedPtr message) {
       try {
         keisan::Matrix<4, 1> Pc;
-        ProjectedObject projected_ball = this->ipm->map_object(*message, "base_footprint", Pc);
+        ProjectedObject projected_ball = this->ipm->map_object(*message, this->node->now(), "base_footprint", Pc);
 
         rclcpp::Time now = this->node->now();
 
@@ -109,7 +109,7 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
     try {
       keisan::Matrix<4, 1> Pc;
       ProjectedObject projected_object =
-        this->ipm->map_object(detected_object, "base_footprint", Pc);
+        this->ipm->map_object(detected_object, message->header.stamp, "base_footprint", Pc);
 
       projected_objects.projected_objects.push_back(projected_object);
 
