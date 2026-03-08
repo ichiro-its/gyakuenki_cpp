@@ -260,7 +260,7 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
 gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
-  const DetectedObject & detected_object, const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
+  const DetectedObject & detected_object, const rclcpp::Time & stamp, const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
 {
   // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
   // p = K * [R | T] * Pw

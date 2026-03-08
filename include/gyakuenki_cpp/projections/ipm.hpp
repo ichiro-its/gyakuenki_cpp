@@ -79,7 +79,7 @@ public:
   cv::Point2d get_normalized_target_pixel(const DetectedObject & detected_object);
 
   gyakuenki_interfaces::msg::ProjectedObject map_object(
-    const DetectedObject & detected_object, const std::string & output_frame,
+    const DetectedObject & detected_object, const rclcpp::Time & stamp, const std::string & output_frame,
     keisan::Matrix<4, 1> & Pc);
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }
