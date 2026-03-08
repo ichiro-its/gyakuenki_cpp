@@ -68,30 +68,34 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
     ball_ekf_.predict(delta_sec);
   }
   else {
-    if (lost_ball_duration > 10.0) ball_initialized_ = false;
-    lost_ball_duration = 0.0;
+    try {
+      if (lost_ball_duration > 10.0) ball_initialized_ = false;
+      lost_ball_duration = 0.0;
 
-    keisan::Matrix<4, 1> Pc;
-    ProjectedObject projected_ball =
-        this->ipm->map_object(best_ball, message->header.stamp, "base_footprint", Pc);
+      keisan::Matrix<4, 1> Pc;
+      ProjectedObject projected_ball =
+          this->ipm->map_object(best_ball, message->header.stamp, "base_footprint", Pc);
 
-    raw_x = projected_ball.position.x;
-    raw_y = projected_ball.position.y;
-    
-    if (!ball_initialized_) {
-      ball_ekf_.init(raw_x, raw_y, 0.0, 0.0);
-      last_ball_time_ = now;
-      ball_initialized_ = true;
-      return;
-    }
+      raw_x = projected_ball.position.x;
+      raw_y = projected_ball.position.y;
+      
+      if (!ball_initialized_) {
+        ball_ekf_.init(raw_x, raw_y, 0.0, 0.0);
+        last_ball_time_ = now;
+        ball_initialized_ = true;
+        return;
+      }
 
-    if (delta_sec > 0.0) {
-      ball_ekf_.predict(delta_sec);
+      if (delta_sec > 0.0) {
+        ball_ekf_.predict(delta_sec);
 
-      keisan::Matrix<2, 1> z;
-      z[0][0] = projected_ball.position.x;
-      z[1][0] = projected_ball.position.y;
-      ball_ekf_.update(z);
+        keisan::Matrix<2, 1> z;
+        z[0][0] = projected_ball.position.x;
+        z[1][0] = projected_ball.position.y;
+        ball_ekf_.update(z);
+      }
+    } catch (std::exception & e) {
+      RCLCPP_ERROR(this->node->get_logger(), e.what());
     }
   }
 
