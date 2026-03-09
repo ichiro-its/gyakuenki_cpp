@@ -40,28 +40,11 @@ GyakuenkiCppNode::GyakuenkiCppNode(
   projected_objects_publisher =
     node->create_publisher<ProjectedObjects>("gyakuenki_cpp/projected_objects", 10);
 
-  projected_ball_publisher =
-    node->create_publisher<ProjectedObject>("gyakuenki_cpp/projected_ball", 10);
-
   markers_publisher = node->create_publisher<MarkerArray>("gyakuenki_cpp/markers", 10);
 
   dnn_detection_subscriber = node->create_subscription<DetectedObjects>(
     "ninshiki_cpp/dnn_detection", 10,
     [this](const DetectedObjects::SharedPtr message) { this->publish(message); });
-
-  ball_detection_subscriber = node->create_subscription<DetectedObject>(
-    "soccer/ball_detection", 10,
-    [this](const DetectedObject::SharedPtr message) {
-      try {
-        keisan::Matrix<4, 1> Pc;
-        ProjectedObject projected_ball =
-          this->ipm->map_object(*message, rclcpp::Time(0), "base_footprint", Pc);
-        projected_ball_publisher->publish(projected_ball);
-      } catch (std::exception & e) {
-        RCLCPP_ERROR(this->node->get_logger(), e.what());
-      }
-    }
-  );
 
   // Camera Offset Services
   get_camera_offset_service = node->create_service<GetCameraOffset>(

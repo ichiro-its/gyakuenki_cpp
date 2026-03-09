@@ -374,6 +374,10 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   projected_object.position.y = Pw[1][0];
   projected_object.position.z = Pw[2][0];
   projected_object.confidence = detected_object.score;
+  projected_object.left = detected_object.left;
+  projected_object.top = detected_object.top;
+  projected_object.right = detected_object.right;
+  projected_object.bottom = detected_object.bottom;
 
   return projected_object;
 }
