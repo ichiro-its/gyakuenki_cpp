@@ -1,6 +1,8 @@
 #include "gyakuenki_cpp/node/ekf_test_node.hpp"
 #include <cmath>
 #include <algorithm>
+#include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
+#include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -28,6 +30,39 @@ EkfTestNode::EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::
     "ninshiki_cpp/dnn_detection", 10,
     [this](const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message) {
       this->dnn_detection_callback(message);
+    });
+
+  // Camera Offset Services
+  get_camera_offset_service = node->create_service<GetCameraOffset>(
+    "camera/get_camera_offset", [this, config_path](
+                                  const GetCameraOffset::Request::SharedPtr request,
+                                  GetCameraOffset::Response::SharedPtr response) {
+      this->ipm->load_config(config_path);
+      auto camera_offset = this->ipm->get_camera_offset();
+      response->position_x = camera_offset.position.x;
+      response->position_y = camera_offset.position.y;
+      response->position_z = camera_offset.position.z;
+
+      response->roll = camera_offset.roll.degree();
+      response->pitch = camera_offset.pitch.degree();
+      response->yaw = camera_offset.yaw.degree();
+
+      response->status = true;
+    });
+
+  update_camera_offset_service = node->create_service<UpdateCameraOffset>(
+    "camera/update_camera_offset", [this](
+                                     const UpdateCameraOffset::Request::SharedPtr request,
+                                     UpdateCameraOffset::Response::SharedPtr response) {
+      this->ipm->set_config(
+        request->position_x, request->position_y, request->position_z, request->roll,
+        request->pitch, request->yaw);
+
+      if (request->save) {
+        this->ipm->save_config();
+      }
+
+      response->status = true;
     });
 }
 
@@ -65,7 +100,7 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
     if (!ball_initialized_) return;
 
     lost_ball_duration += delta_sec;
-    ball_ekf_.predict(delta_sec);
+    ball_ekf_.predictFuture(delta_sec);
   }
   else {
     try {
