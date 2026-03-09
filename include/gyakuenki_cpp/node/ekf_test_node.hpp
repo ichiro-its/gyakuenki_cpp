@@ -12,8 +12,10 @@
 #include "ninshiki_interfaces/msg/detected_objects.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 
-#include "gyakuenki_interfaces/msg/projected_objects.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
+#include "gyakuenki_interfaces/msg/projected_objects.hpp"
+#include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
+#include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
 
 #include "gyakuenki_cpp/projections/ipm.hpp"
 #include "keisan/ekf/ekf_ball.hpp"
@@ -24,7 +26,14 @@ namespace gyakuenki_cpp
 class EkfTestNode
 {
 public:
+  using MarkerArray = visualization_msgs::msg::MarkerArray;
+  using Marker = visualization_msgs::msg::Marker;
+  using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
+  using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
+  using ProjectedObjects = gyakuenki_interfaces::msg::ProjectedObjects;
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
+  using GetCameraOffset = gyakuenki_interfaces::srv::GetCameraOffset;
+  using UpdateCameraOffset = gyakuenki_interfaces::srv::UpdateCameraOffset;
   
   EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path);
 
@@ -40,6 +49,9 @@ private:
   
   rclcpp::Publisher<gyakuenki_interfaces::msg::ProjectedObjects>::SharedPtr projected_objects_publisher;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markers_publisher;
+
+  rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
+  rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
 
   std::shared_ptr<IPM> ipm;
   keisan::ekf_ball ball_ekf_;
