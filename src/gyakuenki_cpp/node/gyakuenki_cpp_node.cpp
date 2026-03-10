@@ -110,12 +110,22 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
 
   uint8_t id = 0;
   for (const auto & detected_object : message->detected_objects) {
+    ProjectedObject projected_object;
+
+    projected_object.label = detected_object.label;
+    projected_object.confidence = detected_object.score;
+    projected_object.left = detected_object.left;
+    projected_object.top = detected_object.top;
+    projected_object.right = detected_object.right;
+    projected_object.bottom = detected_object.bottom;
+    projected_object.has_projection = true;
+
     try {
       keisan::Matrix<4, 1> Pc;
-      ProjectedObject projected_object =
+      Point3 position =
         this->ipm->map_object(detected_object, message->header.stamp, "base_footprint", Pc);
 
-      projected_objects.projected_objects.push_back(projected_object);
+      projected_object.position = position;
 
       Marker marker;
       marker.header.frame_id = "camera";
@@ -173,8 +183,11 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
 
       markers.markers.push_back(marker);
     } catch (std::exception & e) {
-      RCLCPP_ERROR(this->node->get_logger(), e.what());
+      projected_object.has_projection = false;
+      RCLCPP_WARN(this->node->get_logger(), e.what());
     }
+
+    projected_objects.projected_objects.push_back(projected_object);
   }
 
   projected_objects_publisher->publish(projected_objects);
