@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <filesystem>
 
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_ros/buffer.h"
@@ -40,6 +41,8 @@ public:
 private:
   void dnn_detection_callback(const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message);
 
+  void load_config();
+
   std::shared_ptr<rclcpp::Node> node;
 
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
@@ -59,9 +62,15 @@ private:
   bool ball_initialized_;
   rclcpp::Time last_ball_time_;
 
-  double grass_friction_;
+  double lost_ball_duration;
 
-  double lost_ball_duration = 0.0;
+  std::string ekf_config_path_;
+  std::filesystem::file_time_type last_modified_time_;
+  
+  double grass_friction_ = 0.15;
+  double q_pos_ = 1e-3;
+  double q_vel_ = 1e-2;
+  double r_pos_ = 0.01;
 };
 
 }  // namespace gyakuenki_cpp
