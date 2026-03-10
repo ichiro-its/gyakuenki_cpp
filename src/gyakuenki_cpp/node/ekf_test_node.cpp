@@ -1,6 +1,10 @@
 #include "gyakuenki_cpp/node/ekf_test_node.hpp"
 #include <cmath>
 #include <algorithm>
+#include <fstream>
+#include <nlohmann/json.hpp>
+#include <cstdlib>
+
 #include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
 
@@ -10,10 +14,10 @@ namespace gyakuenki_cpp
 EkfTestNode::EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
 : node(node), ball_initialized_(false), lost_ball_duration(0.0)
 {
-  node->declare_parameter("grass_friction", 0.15);
-  node->declare_parameter("ekf_q_pos", 1e-3);
-  node->declare_parameter("ekf_q_vel", 1e-2);
-  node->declare_parameter("ekf_r_pos", 0.01);
+  std::string home_dir = getenv("HOME");
+  ekf_config_path_ = home_dir + "/ichiro-ws/src/gyakuenki_cpp/config/ekf.json";
+
+  load_config();
 
   tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
   tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
@@ -66,8 +70,37 @@ EkfTestNode::EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::
     });
 }
 
+void EkfTestNode::load_config()
+{
+  try {
+    if (std::filesystem::exists(ekf_config_path_)) return;
+
+    auto curr_time = std::filesystem::last_write_time(ekf_config_path_);
+
+    if (curr_time != last_modified_time_) {
+      std::ifstream file(ekf_config_path_);
+      
+      if (file.is_open()) {
+        nlohmann::json j;
+        file >> j;
+
+        if (j.contains("grass_friction")) grass_friction_ = j["grass_friction"];
+        if (j.contains("ekf_q_pos")) q_pos_ = j["ekf_q_pos"];
+        if (j.contains("ekf_q_vel")) q_vel_ = j["ekf_q_pos"];
+        if (j.contains("ekf_r_pos")) r_pos_ = j["ekf_r_pos"];
+
+        curr_time = last_modified_time_;
+      }
+    }
+  } catch (const std::exception& e) {
+    RCLCPP_WARN(node->get_logger(), "error load config: %s", e.what());
+  }
+}
+
 void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message)
 {
+  load_config();
+
   rclcpp::Time now = node->now();
   double delta_sec = ball_initialized_ ? (now - last_ball_time_).seconds() : 0.0;
 
@@ -88,21 +121,16 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
     }
   }
 
-  double q_pos, q_vel, r_pos;
-  node->get_parameter("ekf_q_pos", q_pos);
-  node->get_parameter("ekf_q_vel", q_vel);
-  node->get_parameter("ekf_r_pos", r_pos);
-
-  ball_ekf_.setQ(q_pos, q_vel, 0.001);
-  ball_ekf_.setR(r_pos);
+  ball_ekf_.setQ(q_pos_, q_vel_, 0.001);
+  ball_ekf_.setR(r_pos_);
+  ball_ekf_.setFriction(grass_friction_);
 
   if (!ball_found) {
     if (!ball_initialized_) return;
 
     lost_ball_duration += delta_sec;
-    ball_ekf_.predictFuture(delta_sec);
-  }
-  else {
+    ball_ekf_.predict(delta_sec);
+  } else {
     try {
       if (lost_ball_duration > 10.0) ball_initialized_ = false;
       lost_ball_duration = 0.0;
@@ -118,16 +146,15 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
         ball_ekf_.init(raw_x, raw_y, 0.0, 0.0);
         last_ball_time_ = now;
         ball_initialized_ = true;
-        return;
-      }
+      } else {
+        if (delta_sec > 0.0) {
+          ball_ekf_.predict(delta_sec);
 
-      if (delta_sec > 0.0) {
-        ball_ekf_.predict(delta_sec);
-
-        keisan::Matrix<2, 1> z;
-        z[0][0] = projected_ball.position.x;
-        z[1][0] = projected_ball.position.y;
-        ball_ekf_.update(z);
+          keisan::Matrix<2, 1> z;
+          z[0][0] = projected_ball.position.x;
+          z[1][0] = projected_ball.position.y;
+          ball_ekf_.update(z);
+        }
       }
     } catch (std::exception & e) {
       RCLCPP_ERROR(this->node->get_logger(), e.what());
@@ -143,27 +170,14 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
   double vy = vel[1][0];
   double v_mag = std::sqrt(vx*vx + vy*vy);
 
-  node->get_parameter("grass_friction", grass_friction_);
-
-  double shadow_x = x_curr;
-  double shadow_y = y_curr;
-  double predicted_distance = 0.0;
   double target_time = 5.0;
-    
-  if (v_mag > 0.05 && grass_friction_ > 0.0) {
-    double gravity = 9.81;
-    double acceleration = grass_friction_ * gravity;
+  keisan::Matrix<4,1> future_state = ball_ekf_.predictFuture(target_time);
 
-    double time_to_stop = v_mag / acceleration;
+  double shadow_x = future_state[0][0];
+  double shadow_y = future_state[1][0];
 
-    double effective_time = std::min(target_time, time_to_stop);
+  double predicted_distance = std::sqrt((shadow_x - x_curr) * (shadow_x - x_curr) + (shadow_y - y_curr) * (shadow_y - y_curr));
 
-    predicted_distance = (v_mag * effective_time) - (0.5 * acceleration * effective_time * effective_time);
-      
-    shadow_x = x_curr + predicted_distance * (vx / v_mag);
-    shadow_y = y_curr + predicted_distance * (vy / v_mag);
-  }
-  
   RCLCPP_INFO(node->get_logger(), "\n--- [EKF BALL] ---");
   RCLCPP_INFO(node->get_logger(), "Status        : %s", (ball_found ? "BALL FOUND" : "BALL LOST"));
   if (ball_found) {
