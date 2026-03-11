@@ -13,10 +13,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
-
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2 REQUIRED)
@@ -60,13 +56,6 @@ install(TARGETS ${PROJECT_NAME}
   ARCHIVE DESTINATION "lib"
   LIBRARY DESTINATION "lib"
   RUNTIME DESTINATION "bin")
-
-add_executable(main "src/gyakuenki_cpp_main.cpp")
-target_include_directories(main PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-target_link_libraries(main ${PROJECT_NAME})
-
 add_executable(ekf_test_node 
   "src/ekf_test_main.cpp" 
   "src/gyakuenki_cpp/node/ekf_test_node.cpp"
@@ -81,8 +70,20 @@ ament_target_dependencies(ekf_test_node
   visualization_msgs
   ninshiki_interfaces
   gyakuenki_interfaces
-  keisan
-)
+  keisan)
+
+add_executable(main "src/gyakuenki_cpp_main.cpp")
+target_include_directories(main PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(main ${PROJECT_NAME})
+ament_target_dependencies(main
+  rclcpp
+  tf2_ros
+  visualization_msgs
+  ninshiki_interfaces
+  gyakuenki_interfaces
+  keisan)
 
 install(TARGETS
   main
