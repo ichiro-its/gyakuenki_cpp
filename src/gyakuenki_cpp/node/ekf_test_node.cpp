@@ -1,9 +1,10 @@
 #include "gyakuenki_cpp/node/ekf_test_node.hpp"
-#include <cmath>
+
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <cstdlib>
 
 #include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
@@ -11,7 +12,8 @@
 namespace gyakuenki_cpp
 {
 
-EkfTestNode::EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
+EkfTestNode::EkfTestNode(
+  const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
 : node(node), ball_initialized_(false), lost_ball_duration(0.0)
 {
   std::string home_dir = getenv("HOME");
@@ -26,9 +28,9 @@ EkfTestNode::EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::
 
   projected_objects_publisher = node->create_publisher<gyakuenki_interfaces::msg::ProjectedObjects>(
     "gyakuenki_cpp/projected_objects", 10);
-    
-  markers_publisher = node->create_publisher<visualization_msgs::msg::MarkerArray>(
-    "ekf_test/markers", 10);
+
+  markers_publisher =
+    node->create_publisher<visualization_msgs::msg::MarkerArray>("ekf_test/markers", 10);
 
   dnn_subscriber = node->create_subscription<ninshiki_interfaces::msg::DetectedObjects>(
     "ninshiki_cpp/dnn_detection", 10,
@@ -73,42 +75,49 @@ EkfTestNode::EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::
 void EkfTestNode::load_config()
 {
   try {
-    if (std::filesystem::exists(ekf_config_path_)) return;
+    if (!std::filesystem::exists(ekf_config_path_)) {
+      std::ofstream file(ekf_config_path_);
+      if (file.is_open()) {
+        nlohmann::json j;
+        j["grass_friction"] = 0.05;
+        j["ekf_q_pos"] = 0.001;
+        j["ekf_q_vel"] = 0.001;
+        j["ekf_r_pos"] = 0.01;
+        file << j;
+        file.close();
+      }
+      return;
+    }
 
     auto curr_time = std::filesystem::last_write_time(ekf_config_path_);
 
     if (curr_time != last_modified_time_) {
       std::ifstream file(ekf_config_path_);
-      
+
       if (file.is_open()) {
         nlohmann::json j;
         file >> j;
 
         if (j.contains("grass_friction")) grass_friction_ = j["grass_friction"];
         if (j.contains("ekf_q_pos")) q_pos_ = j["ekf_q_pos"];
-        if (j.contains("ekf_q_vel")) q_vel_ = j["ekf_q_pos"];
+        if (j.contains("ekf_q_vel")) q_vel_ = j["ekf_q_vel"];
         if (j.contains("ekf_r_pos")) r_pos_ = j["ekf_r_pos"];
 
         curr_time = last_modified_time_;
       }
     }
-  } catch (const std::exception& e) {
+  } catch (const std::exception & e) {
     RCLCPP_WARN(node->get_logger(), "error load config: %s", e.what());
   }
 }
 
-void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message)
+void EkfTestNode::dnn_detection_callback(
+  const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message)
 {
   load_config();
 
   rclcpp::Time now = node->now();
   double delta_sec = ball_initialized_ ? (now - last_ball_time_).seconds() : 0.0;
-
-  last_ball_time_ = now;
-
-  double raw_x = 0.0;
-  double raw_y = 0.0; 
-
   double max_confidence = -1.0;
   ninshiki_interfaces::msg::DetectedObject best_ball;
   bool ball_found = false;
@@ -120,6 +129,13 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
       ball_found = true;
     }
   }
+
+  if (ball_found) {
+    last_ball_time_ = now;
+  }
+
+  double raw_x = 0.0;
+  double raw_y = 0.0;
 
   ball_ekf_.setQ(q_pos_, q_vel_, 0.001);
   ball_ekf_.setR(r_pos_);
@@ -137,11 +153,11 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
 
       keisan::Matrix<4, 1> Pc;
       ProjectedObject projected_ball =
-          this->ipm->map_object(best_ball, message->header.stamp, "base_footprint", Pc);
+        this->ipm->map_object(best_ball, message->header.stamp, "base_footprint", Pc);
 
       raw_x = projected_ball.position.x;
       raw_y = projected_ball.position.y;
-      
+
       if (!ball_initialized_) {
         ball_ekf_.init(raw_x, raw_y, 0.0, 0.0);
         last_ball_time_ = now;
@@ -168,15 +184,16 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
   double y_curr = pos[1][0];
   double vx = vel[0][0];
   double vy = vel[1][0];
-  double v_mag = std::sqrt(vx*vx + vy*vy);
+  double v_mag = std::sqrt(vx * vx + vy * vy);
 
-  double target_time = 5.0;
-  keisan::Matrix<4,1> future_state = ball_ekf_.predictFuture(target_time);
+  double target_time = 50.0;
+  auto [future_state, future_cov] = ball_ekf_.predictFuture(target_time);
 
   double shadow_x = future_state[0][0];
   double shadow_y = future_state[1][0];
 
-  double predicted_distance = std::sqrt((shadow_x - x_curr) * (shadow_x - x_curr) + (shadow_y - y_curr) * (shadow_y - y_curr));
+  double predicted_distance = std::sqrt(
+    (shadow_x - x_curr) * (shadow_x - x_curr) + (shadow_y - y_curr) * (shadow_y - y_curr));
 
   RCLCPP_INFO(node->get_logger(), "\n--- [EKF BALL] ---");
   RCLCPP_INFO(node->get_logger(), "Status        : %s", (ball_found ? "BALL FOUND" : "BALL LOST"));
@@ -185,14 +202,18 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
   } else {
     RCLCPP_INFO(node->get_logger(), "Lost Duration   : %.2f secs", lost_ball_duration);
   }
-  RCLCPP_INFO(node->get_logger(), "2. Filtered (EKF)  : X=%.3f, Y=%.3f | velocity = %.3f m/s", x_curr, y_curr, v_mag);
-  RCLCPP_INFO(node->get_logger(), "3. Shadow (%.3fs)  : X=%.3f, Y=%.3f | distance = %.3f m", target_time, shadow_x, shadow_y, predicted_distance);
+  RCLCPP_INFO(
+    node->get_logger(), "2. Filtered (EKF)  : X=%.3f, Y=%.3f | velocity = %.3f m/s", x_curr, y_curr,
+    v_mag);
+  RCLCPP_INFO(
+    node->get_logger(), "3. Shadow (%.3fs)  : X=%.3f, Y=%.3f | distance = %.3f m", target_time,
+    shadow_x, shadow_y, predicted_distance);
   RCLCPP_INFO(node->get_logger(), "---------------------------------");
 
   gyakuenki_interfaces::msg::ProjectedObjects published_objects;
 
   gyakuenki_interfaces::msg::ProjectedObject filtered_ball;
-  filtered_ball.label = "ball"; 
+  filtered_ball.label = "ball";
   filtered_ball.position.x = x_curr;
   filtered_ball.position.y = y_curr;
   filtered_ball.position.z = 0.0;
@@ -210,7 +231,7 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
   projected_objects_publisher->publish(published_objects);
 
   visualization_msgs::msg::MarkerArray markers;
-    
+
   visualization_msgs::msg::Marker m_ekf;
   m_ekf.header.frame_id = "base_footprint";
   m_ekf.header.stamp = now;
@@ -218,9 +239,16 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
   m_ekf.id = 0;
   m_ekf.type = visualization_msgs::msg::Marker::SPHERE;
   m_ekf.action = visualization_msgs::msg::Marker::ADD;
-  m_ekf.pose.position.x = x_curr; m_ekf.pose.position.y = y_curr; m_ekf.pose.position.z = 0.0765; 
-  m_ekf.scale.x = 0.153; m_ekf.scale.y = 0.153; m_ekf.scale.z = 0.153; 
-  m_ekf.color.a = 1.0; m_ekf.color.r = 1.0; m_ekf.color.g = 0.0; m_ekf.color.b = 0.0;
+  m_ekf.pose.position.x = x_curr;
+  m_ekf.pose.position.y = y_curr;
+  m_ekf.pose.position.z = 0.0765;
+  m_ekf.scale.x = 0.153;
+  m_ekf.scale.y = 0.153;
+  m_ekf.scale.z = 0.153;
+  m_ekf.color.a = 1.0;
+  m_ekf.color.r = 1.0;
+  m_ekf.color.g = 0.0;
+  m_ekf.color.b = 0.0;
   markers.markers.push_back(m_ekf);
 
   visualization_msgs::msg::Marker m_shadow;
@@ -230,9 +258,16 @@ void EkfTestNode::dnn_detection_callback(const ninshiki_interfaces::msg::Detecte
   m_shadow.id = 1;
   m_shadow.type = visualization_msgs::msg::Marker::SPHERE;
   m_shadow.action = visualization_msgs::msg::Marker::ADD;
-  m_shadow.pose.position.x = shadow_x; m_shadow.pose.position.y = shadow_y; m_shadow.pose.position.z = 0.0765;
-  m_shadow.scale.x = 0.153; m_shadow.scale.y = 0.153; m_shadow.scale.z = 0.153;
-  m_shadow.color.a = 0.5; m_shadow.color.r = 0.0; m_shadow.color.g = 1.0; m_shadow.color.b = 0.0;
+  m_shadow.pose.position.x = shadow_x;
+  m_shadow.pose.position.y = shadow_y;
+  m_shadow.pose.position.z = 0.0765;
+  m_shadow.scale.x = 0.153;
+  m_shadow.scale.y = 0.153;
+  m_shadow.scale.z = 0.153;
+  m_shadow.color.a = 0.5;
+  m_shadow.color.r = 0.0;
+  m_shadow.color.g = 1.0;
+  m_shadow.color.b = 0.0;
   markers.markers.push_back(m_shadow);
 
   markers_publisher->publish(markers);
