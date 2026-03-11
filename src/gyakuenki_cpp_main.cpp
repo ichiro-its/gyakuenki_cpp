@@ -18,20 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include <iostream>
 #include <memory>
 
 #include "gyakuenki_cpp/gyakuenki_cpp.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 int main(int argc, char ** argv)
 {
+  if (argc < 2) {
+    std::cerr << "Usage: ros2 run gyakuenki_cpp gyakuenki_cpp_node <config_path>" << std::endl;
+    return 1;
+  }
+
+  const std::string & path = argv[1];
+
   auto args = rclcpp::init_and_remove_ros_arguments(argc, argv);
 
-  const std::string & path = args[1];
-
   auto node = std::make_shared<rclcpp::Node>("gyakuenki_cpp");
-  auto gyakuenki_cpp_node = std::make_shared<gyakuenki_cpp::GyakuenkiCppNode>(node, path);
 
-  rclcpp::spin(node);
+  try {
+    auto gyakuenki_cpp_node = std::make_shared<gyakuenki_cpp::GyakuenkiCppNode>(node, path);
+
+    RCLCPP_INFO(node->get_logger(), "GyakuenkiCpp Node has been started.");
+    RCLCPP_INFO(node->get_logger(), "Press Ctrl+C to stop...");
+
+    rclcpp::spin(node);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(node->get_logger(), "Exception: %s", e.what());
+    rclcpp::shutdown();
+    return 1;
+  }
 
   rclcpp::shutdown();
 
