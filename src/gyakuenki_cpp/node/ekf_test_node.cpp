@@ -186,11 +186,16 @@ void EkfTestNode::dnn_detection_callback(
   double vy = vel[1][0];
   double v_mag = std::sqrt(vx * vx + vy * vy);
 
-  double target_time = 50.0;
-  auto [future_state, future_cov] = ball_ekf_.predictFuture(target_time);
+  double target_time = 5.0;
+  auto future_state_vector = ball_ekf_.predictFuture(target_time);
 
-  double shadow_x = future_state[0][0];
-  double shadow_y = future_state[1][0];
+  double shadow_x = x_curr;
+  double shadow_y = y_curr;
+
+  if (!future_state_vector.empty()) {
+    shadow_x = future_state_vector.back()[0][0];
+    shadow_y = future_state_vector.back()[1][0];
+  }
 
   double predicted_distance = std::sqrt(
     (shadow_x - x_curr) * (shadow_x - x_curr) + (shadow_y - y_curr) * (shadow_y - y_curr));
@@ -251,24 +256,35 @@ void EkfTestNode::dnn_detection_callback(
   m_ekf.color.b = 0.0;
   markers.markers.push_back(m_ekf);
 
-  visualization_msgs::msg::Marker m_shadow;
-  m_shadow.header.frame_id = "base_footprint";
-  m_shadow.header.stamp = now;
-  m_shadow.ns = "shadow_ball";
-  m_shadow.id = 1;
-  m_shadow.type = visualization_msgs::msg::Marker::SPHERE;
-  m_shadow.action = visualization_msgs::msg::Marker::ADD;
-  m_shadow.pose.position.x = shadow_x;
-  m_shadow.pose.position.y = shadow_y;
-  m_shadow.pose.position.z = 0.0765;
-  m_shadow.scale.x = 0.153;
-  m_shadow.scale.y = 0.153;
-  m_shadow.scale.z = 0.153;
-  m_shadow.color.a = 0.5;
-  m_shadow.color.r = 0.0;
-  m_shadow.color.g = 1.0;
-  m_shadow.color.b = 0.0;
-  markers.markers.push_back(m_shadow);
+  int shadow_id = 1;
+
+  for (const auto& pt : future_state_vector) {
+    visualization_msgs::msg::Marker m_shadow;
+    m_shadow.header.frame_id = "base_footprint";
+    m_shadow.header.stamp = now;
+    m_shadow.ns = "shadow_ball";
+    m_shadow.id = shadow_id++;
+    m_shadow.type = visualization_msgs::msg::Marker::SPHERE;
+    m_shadow.action = visualization_msgs::msg::Marker::ADD;
+    
+    // Set posisi dari data matriks EKF
+    m_shadow.pose.position.x = pt[0][0];
+    m_shadow.pose.position.y = pt[1][0];
+    m_shadow.pose.position.z = 0.0765;
+    
+    m_shadow.scale.x = 0.153;
+    m_shadow.scale.y = 0.153;
+    m_shadow.scale.z = 0.153;
+    
+    m_shadow.color.a = 0.5;
+    m_shadow.color.r = 0.0;
+    m_shadow.color.g = 1.0;
+    m_shadow.color.b = 0.0;
+    
+    m_shadow.lifetime = rclcpp::Duration::from_seconds(0.1);
+
+    markers.markers.push_back(m_shadow);
+  }
 
   markers_publisher->publish(markers);
 }
