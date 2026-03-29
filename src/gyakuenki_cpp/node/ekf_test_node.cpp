@@ -102,6 +102,7 @@ void EkfTestNode::load_config()
         if (j.contains("ekf_q_pos")) q_pos_ = j["ekf_q_pos"];
         if (j.contains("ekf_q_vel")) q_vel_ = j["ekf_q_vel"];
         if (j.contains("ekf_r_pos")) r_pos_ = j["ekf_r_pos"];
+        if (j.contains("enable_testing")) is_testing = j["enable_testing"];
 
         curr_time = last_modified_time_;
       }
@@ -137,7 +138,7 @@ void EkfTestNode::dnn_detection_callback(
   double raw_x = 0.0;
   double raw_y = 0.0;
 
-  ball_ekf_.setQ(q_pos_, q_vel_, 0.001);
+  ball_ekf_.setQ(q_pos_, q_vel_);
   ball_ekf_.setR(r_pos_);
   ball_ekf_.setFriction(grass_friction_);
 
@@ -189,6 +190,20 @@ void EkfTestNode::dnn_detection_callback(
   double target_time = 5.0;
   auto future_state_vector = ball_ekf_.predictFuture(target_time);
 
+  if (is_testing == true) {
+    if (v_mag > 0.5 && is_validating == false) {
+      frozen_x = future_state_vector.back()[0][0];
+      frozen_y = future_state_vector.back()[1][0];
+      is_validating = true;
+    } else if (v_mag < 0.005 && is_validating == true) {
+      double error_prediction = hypot(x_curr - frozen_x, y_curr - frozen_y);
+      RCLCPP_INFO(node->get_logger(), "EKF prediction error: %.2f", error_prediction);
+      is_validating = false;
+    }
+  } else {
+    is_validating = false;
+  }
+
   double shadow_x = x_curr;
   double shadow_y = y_curr;
 
@@ -232,6 +247,16 @@ void EkfTestNode::dnn_detection_callback(
   shadow_ball.position.z = 0.0;
   shadow_ball.confidence = max_confidence;
   published_objects.projected_objects.push_back(shadow_ball);
+
+  if (is_validating) {
+    gyakuenki_interfaces::msg::ProjectedObject frozen_ball;
+    frozen_ball.label = "frozen_ball";
+    frozen_ball.position.x = frozen_x;
+    frozen_ball.position.y = frozen_y;
+    frozen_ball.position.z = 0.0;
+    frozen_ball.confidence = max_confidence;
+    published_objects.projected_objects.push_back(frozen_ball);
+  }
 
   projected_objects_publisher->publish(published_objects);
 
@@ -284,6 +309,43 @@ void EkfTestNode::dnn_detection_callback(
     m_shadow.lifetime = rclcpp::Duration::from_seconds(0.1);
 
     markers.markers.push_back(m_shadow);
+  }
+
+  static bool delete_frozen = false;
+  if (is_validating) {
+    visualization_msgs::msg::Marker m_frozen;
+    m_frozen.header.frame_id = "base_footprint";
+    m_frozen.header.stamp = now;
+    m_frozen.ns = "frozen_ball";
+    m_frozen.id = 999;
+    m_frozen.type = visualization_msgs::msg::Marker::SPHERE;
+    m_frozen.action = visualization_msgs::msg::Marker::ADD;
+    
+    m_frozen.pose.position.x = frozen_x;
+    m_frozen.pose.position.y = frozen_y;
+    m_frozen.pose.position.z = 0.0765;
+    
+    m_frozen.scale.x = 0.16;
+    m_frozen.scale.y = 0.16;
+    m_frozen.scale.z = 0.16;
+    
+    m_frozen.color.a = 1.0;
+    m_frozen.color.r = 0.0;
+    m_frozen.color.g = 0.0;
+    m_frozen.color.b = 1.0;
+    
+    markers.markers.push_back(m_frozen);
+    delete_frozen = true;
+  } else if (delete_frozen) {
+      visualization_msgs::msg::Marker m_frozen_delete;
+      m_frozen_delete.header.frame_id = "base_footprint";
+      m_frozen_delete.header.stamp = now;
+      m_frozen_delete.ns = "frozen_ball";
+      m_frozen_delete.id = 999;
+      m_frozen_delete.action = visualization_msgs::msg::Marker::DELETE;
+      
+      markers.markers.push_back(m_frozen_delete);
+      delete_frozen = false;
   }
 
   markers_publisher->publish(markers);
