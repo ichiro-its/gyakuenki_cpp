@@ -2,5 +2,6 @@
   "grass_friction": 0.15,
   "ekf_q_pos": 0.001,
   "ekf_q_vel": 0.01,
-  "ekf_r_pos": 0.01
+  "ekf_r_pos": 0.01,
+  "enable_testing": "false"
 }

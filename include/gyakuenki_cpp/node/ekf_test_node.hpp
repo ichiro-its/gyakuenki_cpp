@@ -71,6 +71,12 @@ private:
   double q_pos_ = 1e-3;
   double q_vel_ = 1e-2;
   double r_pos_ = 0.01;
+  bool is_testing = false;
+  bool is_validating = false;
+
+  // used for testing
+  double frozen_x;
+  double frozen_y;
 };
 
 }  // namespace gyakuenki_cpp
