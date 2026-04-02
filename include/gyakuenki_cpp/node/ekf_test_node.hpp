@@ -58,6 +58,7 @@ private:
 
   std::shared_ptr<IPM> ipm;
   keisan::ekf_ball ball_ekf_;
+  rclcpp::TimerBase::SharedPtr config_timer_;
   
   bool ball_initialized_;
   rclcpp::Time last_ball_time_;
@@ -68,11 +69,17 @@ private:
   std::filesystem::file_time_type last_modified_time_;
   
   double grass_friction_ = 0.15;
-  double q_pos_ = 1e-3;
-  double q_vel_ = 1e-2;
-  double r_pos_ = 0.01;
+  double prediction_noise_pos_ = 1e-3;
+  double prediction_noise_vel_ = 1e-2;
+  double camera_noise_pos_ = 0.01;
   bool is_testing = false;
   bool is_validating = false;
+
+  bool has_first_measurement = false;
+  double first_raw_x = 0.0;
+  double first_raw_y = 0.0;
+  rclcpp::Time first_msg_time;
+  rclcpp::Time last_msg_time;
 
   // used for testing
   double frozen_x;
