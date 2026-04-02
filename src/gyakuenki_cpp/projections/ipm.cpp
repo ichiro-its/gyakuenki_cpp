@@ -165,15 +165,14 @@ cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
 {
   cv::Point2d point;
 
-  // u is the center of the detection
-  point.x = detected_object.left + detected_object.right / 2;
+  point.x = detected_object.left + (detected_object.right / 2.0);
 
   // For goalpost and robot, v is the bottom of the detection
   // Ball and field marks, v is the center of the detection
   if (detected_object.label == "goalpost" || detected_object.label == "robot") {
-    point.y = detected_object.bottom;
+    point.y = detected_object.top + detected_object.bottom;
   } else {
-    point.y = detected_object.top + detected_object.bottom / 2;
+    point.y = detected_object.top + (detected_object.bottom / 2.0);
   }
 
   return point;
@@ -235,7 +234,7 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 {
   // Get object height
   double object_height =
-    object_label == "ball" ? 0.153 / 2 : 0.0;  // For ball, the height is the radius of the ball
+    object_label == "ball" ? 0.135 / 2 : 0.0;  // For ball, the height is the radius of the ball
 
   // Calculate the Z coordinate in camera frame
   double denominator = R[2][0] * pixel.x + R[2][1] * pixel.y + R[2][2];
@@ -273,17 +272,10 @@ tf2::Transform IPM::get_corrected_camera_transform(
   geometry_msgs::msg::TransformStamped t;
   try {
     if (timestamp.nanoseconds() == 0) {
-      t = tf_buffer->lookupTransform(
-        output_frame,
-        camera_info.frame_id,
-        tf2::TimePointZero);
+      t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
     } else {
       t = tf_buffer->lookupTransform(
-        output_frame,
-        camera_info.frame_id,
-        timestamp,
-        tf2::Duration::zero()
-      );
+        output_frame, camera_info.frame_id, timestamp, tf2::Duration::zero());
     }
   } catch (tf2::TransformException &) {
     try {
@@ -300,10 +292,7 @@ tf2::Transform IPM::get_corrected_camera_transform(
   tf2::Quaternion q_base_cam = msg_to_tf2(t.transform.rotation);
 
   tf_base_to_cam.setOrigin(
-    tf2::Vector3(
-      t.transform.translation.x,
-      t.transform.translation.y,
-      t.transform.translation.z));
+    tf2::Vector3(t.transform.translation.x, t.transform.translation.y, t.transform.translation.z));
 
   tf_base_to_cam.setRotation(q_base_cam);
 
@@ -345,14 +334,11 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   tf2::Vector3 t_final = tf_final.getOrigin();
 
   // Convert the quaternion to rotation matrix R
-  keisan::Matrix<4, 4> R =
-    quat_to_rotation_matrix(tf2_to_msg(q_final));
+  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(tf2_to_msg(q_final));
 
   // Get the translation matrix
-  keisan::Matrix<4, 4> T = keisan::translation_matrix(keisan::Point3(
-    t_final.x(),
-    t_final.y(),
-    t_final.z()));
+  keisan::Matrix<4, 4> T =
+    keisan::translation_matrix(keisan::Point3(t_final.x(), t_final.y(), t_final.z()));
 
   // Now, we have the 3D point in camera frame
   Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
