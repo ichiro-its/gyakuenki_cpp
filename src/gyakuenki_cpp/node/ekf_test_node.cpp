@@ -120,7 +120,14 @@ void EkfTestNode::dnn_detection_callback(
   const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message)
 {
   rclcpp::Time current_msg_time = message->header.stamp;
-  double delta_sec = ball_initialized_ ? (current_msg_time - last_msg_time).seconds() : 0.0;
+  double delta_sec = 0.0;
+  if (ball_initialized_) {
+    delta_sec = (current_msg_time - last_msg_time).seconds();
+
+    if (delta_sec <= 0.0) {
+      delta_sec = 1.0/ 30.0; // ~30 fps
+    }
+  }
   last_msg_time = current_msg_time;
 
   double max_confidence = -1.0;
@@ -148,9 +155,20 @@ void EkfTestNode::dnn_detection_callback(
 
     lost_ball_duration += delta_sec;
     ball_ekf_.predict(delta_sec);
+
+    auto prediction_pos = ball_ekf_.getPosition();
+    auto prediction_vel = ball_ekf_.getVelocity();
+    double prediction_vmag = std::sqrt(prediction_vel[0][0] * prediction_vel[0][0] + prediction_vel[1][0] * prediction_vel[1][0]);
+    
+
+    RCLCPP_WARN(node->get_logger(), "[LOST BALL] Predicting... dt: %.3f | X: %.2f, Y: %.2f | V: %.2f m/s", delta_sec, prediction_pos[0][0], prediction_pos[1][0], prediction_vmag);
+
+    if (lost_ball_duration > 10.0) {
+      ball_initialized_ = false;
+      lost_ball_duration = 0.0;
+    }
   } else {
     try {
-      if (lost_ball_duration > 10.0) ball_initialized_ = false;
       lost_ball_duration = 0.0;
 
       keisan::Matrix<4, 1> Pc;
@@ -316,7 +334,7 @@ void EkfTestNode::dnn_detection_callback(
 
   visualization_msgs::msg::Marker m_raw;
   m_raw.header.frame_id = "base_footprint";
-  m_raw.header.stamp = current_msg_time;
+  m_raw.header.stamp = node->now();
   m_raw.ns = "raw_ball";
   m_raw.id = 0;
   m_raw.type = visualization_msgs::msg::Marker::SPHERE;
@@ -343,7 +361,7 @@ void EkfTestNode::dnn_detection_callback(
 
   visualization_msgs::msg::Marker m_ekf;
   m_ekf.header.frame_id = "base_footprint";
-  m_ekf.header.stamp = current_msg_time;
+  m_ekf.header.stamp = node->now();
   m_ekf.ns = "ekf_ball";
   m_ekf.id = 0;
   m_ekf.type = visualization_msgs::msg::Marker::SPHERE;
@@ -360,39 +378,41 @@ void EkfTestNode::dnn_detection_callback(
   m_ekf.color.b = 0.0;
   markers.markers.push_back(m_ekf);
 
-  visualization_msgs::msg::Marker m_shadow;
-  m_shadow.header.frame_id = "base_footprint";
-  m_shadow.header.stamp = current_msg_time;
-  m_shadow.ns = "shadow_ball";
-  m_shadow.id = 1;
-  m_shadow.type = visualization_msgs::msg::Marker::SPHERE;
+  int shadow_id = 1;
+  for (const auto & pt : future_state_vector) {
+    if (shadow_id > 10) break; 
 
-  if (!future_state_vector.empty()) {
+    visualization_msgs::msg::Marker m_shadow;
+    m_shadow.header.frame_id = "base_footprint";
+    m_shadow.header.stamp = node->now();
+    m_shadow.ns = "shadow_ball";
+    m_shadow.id = shadow_id++;
+    m_shadow.type = visualization_msgs::msg::Marker::SPHERE;
     m_shadow.action = visualization_msgs::msg::Marker::ADD;
 
-    m_shadow.pose.position.x = shadow_x;
-    m_shadow.pose.position.y = shadow_y;
+    m_shadow.pose.position.x = pt[0][0];
+    m_shadow.pose.position.y = pt[1][0];
     m_shadow.pose.position.z = 0.0765;
 
     m_shadow.scale.x = 0.153;
     m_shadow.scale.y = 0.153;
     m_shadow.scale.z = 0.153;
 
-    m_shadow.color.a = 0.5;
+    m_shadow.color.a = 0.5;  
     m_shadow.color.r = 0.0;
     m_shadow.color.g = 1.0;
     m_shadow.color.b = 0.0;
-  } else {
-    m_shadow.action = visualization_msgs::msg::Marker::DELETE;
-  }
 
-  markers.markers.push_back(m_shadow);
+    m_shadow.lifetime = rclcpp::Duration::from_seconds(0.1); 
+
+    markers.markers.push_back(m_shadow);
+  }
 
   static bool delete_frozen = false;
   if (is_validating) {
     visualization_msgs::msg::Marker m_frozen;
     m_frozen.header.frame_id = "base_footprint";
-    m_frozen.header.stamp = current_msg_time;
+    m_frozen.header.stamp = node->now();
     m_frozen.ns = "frozen_ball";
     m_frozen.id = 999;
     m_frozen.type = visualization_msgs::msg::Marker::SPHERE;
@@ -416,7 +436,7 @@ void EkfTestNode::dnn_detection_callback(
   } else if (delete_frozen) {
     visualization_msgs::msg::Marker m_frozen_delete;
     m_frozen_delete.header.frame_id = "base_footprint";
-    m_frozen_delete.header.stamp = current_msg_time;
+    m_frozen_delete.header.stamp = node->now();
     m_frozen_delete.ns = "frozen_ball";
     m_frozen_delete.id = 999;
     m_frozen_delete.action = visualization_msgs::msg::Marker::DELETE;
