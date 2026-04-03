@@ -25,6 +25,7 @@ find_package(jitsuyo REQUIRED)
 find_package(keisan REQUIRED)
 find_package(ninshiki_interfaces REQUIRED)
 find_package(gyakuenki_interfaces REQUIRED)
+find_package(akushon_interfaces REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   "src/${PROJECT_NAME}/node/gyakuenki_cpp_node.cpp"
@@ -42,6 +43,7 @@ ament_target_dependencies(${PROJECT_NAME}
   OpenCV
   jitsuyo
   keisan
+  akushon_interfaces
   ninshiki_interfaces
   gyakuenki_interfaces)
 
