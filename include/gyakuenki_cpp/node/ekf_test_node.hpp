@@ -1,25 +1,24 @@
 #ifndef GYAKUENKI_CPP__NODE__EKF_TEST_NODE_HPP_
 #define GYAKUENKI_CPP__NODE__EKF_TEST_NODE_HPP_
 
+#include <filesystem>
 #include <memory>
 #include <string>
-#include <filesystem>
 
-#include "rclcpp/rclcpp.hpp"
-#include "tf2_ros/buffer.h"
-#include "tf2_ros/transform_listener.h"
-#include "visualization_msgs/msg/marker_array.hpp"
-
-#include "ninshiki_interfaces/msg/detected_objects.hpp"
-#include "ninshiki_interfaces/msg/detected_object.hpp"
-
+#include "akushon_interfaces/msg/run_action.hpp"
+#include "gyakuenki_cpp/projections/ipm.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "gyakuenki_interfaces/msg/projected_objects.hpp"
 #include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
-
-#include "gyakuenki_cpp/projections/ipm.hpp"
 #include "keisan/ekf/ekf_ball.hpp"
+#include "ninshiki_interfaces/msg/detected_object.hpp"
+#include "ninshiki_interfaces/msg/detected_objects.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 namespace gyakuenki_cpp
 {
@@ -35,23 +34,26 @@ public:
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
   using GetCameraOffset = gyakuenki_interfaces::srv::GetCameraOffset;
   using UpdateCameraOffset = gyakuenki_interfaces::srv::UpdateCameraOffset;
-  
+
   EkfTestNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path);
 
 private:
   void dnn_detection_callback(const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message);
 
   void load_config();
+  void run_action(const std::string & motion_name);
 
   std::shared_ptr<rclcpp::Node> node;
 
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener;
-  
+
   rclcpp::Subscription<ninshiki_interfaces::msg::DetectedObjects>::SharedPtr dnn_subscriber;
-  
-  rclcpp::Publisher<gyakuenki_interfaces::msg::ProjectedObjects>::SharedPtr projected_objects_publisher;
+
+  rclcpp::Publisher<gyakuenki_interfaces::msg::ProjectedObjects>::SharedPtr
+    projected_objects_publisher;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markers_publisher;
+  rclcpp::Publisher<akushon_interfaces::msg::RunAction>::SharedPtr run_action_publisher;
 
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
@@ -59,15 +61,16 @@ private:
   std::shared_ptr<IPM> ipm;
   keisan::ekf_ball ball_ekf_;
   rclcpp::TimerBase::SharedPtr config_timer_;
-  
+
   bool ball_initialized_;
+  bool is_motion_triggered_;
   rclcpp::Time last_ball_time_;
 
   double lost_ball_duration;
 
   std::string ekf_config_path_;
   std::filesystem::file_time_type last_modified_time_;
-  
+
   double grass_friction_ = 0.15;
   double prediction_noise_pos_ = 1e-3;
   double prediction_noise_vel_ = 1e-2;

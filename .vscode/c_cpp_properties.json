@@ -1,0 +1,41 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/salsa-hanaa/ichiro-ws/install/suiryoku/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/atama/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/aruku/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/kansei/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/akushon/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/tachimawari/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/tachimawari_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/suiryoku_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/soccer_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/shisen_cpp/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/shisen_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/gyakuenki_cpp/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/ninshiki_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/jitsuyo/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/keisan/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/kansei_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/gyakuenki_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/cv_bridge/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/atama_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/aruku_interfaces/include/**",
+        "/home/salsa-hanaa/ichiro-ws/install/akushon_interfaces/include/**",
+        "/opt/ros/jazzy/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
