@@ -6,6 +6,7 @@
 #include <string>
 
 #include "akushon_interfaces/msg/run_action.hpp"
+#include "akushon_interfaces/msg/status.hpp"
 #include "gyakuenki_cpp/projections/ipm.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "gyakuenki_interfaces/msg/projected_objects.hpp"
@@ -39,6 +40,7 @@ public:
 
 private:
   void dnn_detection_callback(const ninshiki_interfaces::msg::DetectedObjects::SharedPtr message);
+  void action_status_callback(const akushon_interfaces::msg::Status::SharedPtr msg);
 
   void load_config();
   void run_action(const std::string & motion_name);
@@ -54,6 +56,7 @@ private:
     projected_objects_publisher;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markers_publisher;
   rclcpp::Publisher<akushon_interfaces::msg::RunAction>::SharedPtr run_action_publisher;
+  rclcpp::Subscription<akushon_interfaces::msg::Status>::SharedPtr action_status_subscriber;
 
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;
