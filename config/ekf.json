@@ -1,6 +1,6 @@
 {
-  "grass_friction": 0.15,
-  "prediction_noise_pos": 0.001,
+  "grass_friction": 0.04,
+  "prediction_noise_pos": 0.01,
   "prediction_noise_vel": 0.01,
   "camera_noise_pos": 0.01,
   "enable_testing": false
