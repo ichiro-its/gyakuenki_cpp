@@ -85,7 +85,8 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
   node_timer = node->create_wall_timer(8ms, [this]() {
     try {
-      tf2::Transform tf_final = ipm->get_corrected_camera_transform("base_footprint", rclcpp::Time(0));
+      tf2::Transform tf_final =
+        ipm->get_corrected_camera_transform("base_footprint", rclcpp::Time(0));
 
       geometry_msgs::msg::PoseStamped camera_pose;
       camera_pose.header.stamp = this->node->get_clock()->now();
@@ -98,7 +99,8 @@ GyakuenkiCppNode::GyakuenkiCppNode(
       corrected_camera_publisher->publish(camera_pose);
 
     } catch (const std::exception & ex) {
-      RCLCPP_WARN(this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());
+      RCLCPP_WARN(
+        this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());
     }
   });
 }
@@ -118,7 +120,7 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
     projected_object.top = detected_object.top;
     projected_object.right = detected_object.right;
     projected_object.bottom = detected_object.bottom;
-    projected_object.has_projection = true;
+    projected_object.has_projection = false;
 
     try {
       keisan::Matrix<4, 1> Pc;
@@ -126,6 +128,7 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
         this->ipm->map_object(detected_object, message->header.stamp, "base_footprint", Pc);
 
       projected_object.position = position;
+      projected_object.has_projection = true;
 
       Marker marker;
       marker.header.frame_id = "camera";
@@ -183,7 +186,6 @@ void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
 
       markers.markers.push_back(marker);
     } catch (std::exception & e) {
-      projected_object.has_projection = false;
       RCLCPP_WARN(this->node->get_logger(), e.what());
     }
 
