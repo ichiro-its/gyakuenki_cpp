@@ -32,6 +32,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "gyakuenki_cpp/utils/camera_info.hpp"
+#include "gyakuenki_interfaces/msg/point3.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
 #include "keisan/matrix.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
@@ -81,7 +82,7 @@ public:
   tf2::Transform get_corrected_camera_transform(
     const std::string & output_frame, const rclcpp::Time & timestamp);
 
-  gyakuenki_interfaces::msg::ProjectedObject map_object(
+  gyakuenki_interfaces::msg::Point3 map_object(
     const DetectedObject & detected_object, const rclcpp::Time & timestamp,
     const std::string & output_frame, keisan::Matrix<4, 1> & Pc);
 

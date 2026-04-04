@@ -308,7 +308,7 @@ tf2::Transform IPM::get_corrected_camera_transform(
 }
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
-gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
+gyakuenki_interfaces::msg::Point3 IPM::map_object(
   const DetectedObject & detected_object, const rclcpp::Time & timestamp,
   const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
 {
@@ -353,15 +353,12 @@ gyakuenki_interfaces::msg::ProjectedObject IPM::map_object(
   keisan::Matrix<4, 1> Pw = M * Pc;
 
   // Create the ProjectedObject instance
-  gyakuenki_interfaces::msg::ProjectedObject projected_object;
+  gyakuenki_interfaces::msg::Point3 position;
+  position.x = Pw[0][0];
+  position.y = Pw[1][0];
+  position.z = Pw[2][0];
 
-  projected_object.label = detected_object.label;
-  projected_object.position.x = Pw[0][0];
-  projected_object.position.y = Pw[1][0];
-  projected_object.position.z = Pw[2][0];
-  projected_object.confidence = detected_object.score;
-
-  return projected_object;
+  return position;
 }
 
 }  // namespace gyakuenki_cpp
