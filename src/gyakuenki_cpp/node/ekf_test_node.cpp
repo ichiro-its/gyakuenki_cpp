@@ -42,6 +42,11 @@ EkfTestNode::EkfTestNode(
   run_action_publisher =
     node->create_publisher<akushon_interfaces::msg::RunAction>("/action/run_action", 10);
 
+  action_status_subscriber = node->create_subscription<akushon_interfaces::msg::Status>(
+    "/action/action_status", 10, [this](const akushon_interfaces::msg::Status::SharedPtr msg) {
+      this->action_status_callback(msg);
+    });
+
   // Camera Offset Services
   get_camera_offset_service = node->create_service<GetCameraOffset>(
     "camera/get_camera_offset", [this, config_path](
@@ -125,7 +130,7 @@ void EkfTestNode::dnn_detection_callback(
     delta_sec = (current_msg_time - last_msg_time).seconds();
 
     if (delta_sec <= 0.0) {
-      delta_sec = 1.0/ 30.0; // ~30 fps
+      delta_sec = 1.0 / 30.0;  // ~30 fps
     }
   }
   last_msg_time = current_msg_time;
@@ -158,12 +163,14 @@ void EkfTestNode::dnn_detection_callback(
 
     auto prediction_pos = ball_ekf_.getPosition();
     auto prediction_vel = ball_ekf_.getVelocity();
-    double prediction_vmag = std::sqrt(prediction_vel[0][0] * prediction_vel[0][0] + prediction_vel[1][0] * prediction_vel[1][0]);
-    
+    double prediction_vmag = std::sqrt(
+      prediction_vel[0][0] * prediction_vel[0][0] + prediction_vel[1][0] * prediction_vel[1][0]);
 
-    RCLCPP_WARN(node->get_logger(), "[LOST BALL] Predicting... dt: %.3f | X: %.2f, Y: %.2f | V: %.2f m/s", delta_sec, prediction_pos[0][0], prediction_pos[1][0], prediction_vmag);
+    RCLCPP_WARN(
+      node->get_logger(), "[LOST BALL] Predicting... dt: %.3f | X: %.2f, Y: %.2f | V: %.2f m/s",
+      delta_sec, prediction_pos[0][0], prediction_pos[1][0], prediction_vmag);
 
-    if (lost_ball_duration > 10.0) {
+    if (lost_ball_duration > 5.0) {
       ball_initialized_ = false;
       lost_ball_duration = 0.0;
     }
@@ -222,7 +229,7 @@ void EkfTestNode::dnn_detection_callback(
   double vy = vel[1][0];
   double v_mag = std::sqrt(vx * vx + vy * vy);
 
-  double target_time = 4.0;
+  double target_time = 10.0;
   auto future_state_vector = ball_ekf_.predictFuture(target_time);
 
   double shadow_x = x_curr;
@@ -241,7 +248,7 @@ void EkfTestNode::dnn_detection_callback(
       double pred_x = pt[0][0];
       double pred_y = pt[1][0];
 
-      if (pred_x <= 0.1) {
+      if (pred_x <= 0.25) {
         ball_will_reach_robot = true;
         intercept_y = pred_y;
         break;
@@ -249,10 +256,10 @@ void EkfTestNode::dnn_detection_callback(
     }
 
     if (ball_will_reach_robot && !is_motion_triggered_) {
-      if (intercept_y > 0.1) {
+      if (intercept_y > 0.15) {
         RCLCPP_INFO(node->get_logger(), ">> BALL LEFT");
         run_action("tangan_kiri");
-      } else if (intercept_y < -0.1) {
+      } else if (intercept_y < -0.15) {
         RCLCPP_INFO(node->get_logger(), ">> BALL RIGHT");
         run_action("tangan_kanan");
       } else {
@@ -263,7 +270,10 @@ void EkfTestNode::dnn_detection_callback(
     }
 
     if (x_curr > 0.5 || !ball_found) {
-      is_motion_triggered_ = false;
+      if (is_motion_triggered_) {
+        is_motion_triggered_ = false;
+        run_action("walk_ready");
+      }
     }
   }
 
@@ -380,7 +390,7 @@ void EkfTestNode::dnn_detection_callback(
 
   int shadow_id = 1;
   for (const auto & pt : future_state_vector) {
-    if (shadow_id > 10) break; 
+    if (shadow_id > 10) break;
 
     visualization_msgs::msg::Marker m_shadow;
     m_shadow.header.frame_id = "base_footprint";
@@ -398,12 +408,12 @@ void EkfTestNode::dnn_detection_callback(
     m_shadow.scale.y = 0.153;
     m_shadow.scale.z = 0.153;
 
-    m_shadow.color.a = 0.5;  
+    m_shadow.color.a = 0.5;
     m_shadow.color.r = 0.0;
     m_shadow.color.g = 1.0;
     m_shadow.color.b = 0.0;
 
-    m_shadow.lifetime = rclcpp::Duration::from_seconds(0.1); 
+    m_shadow.lifetime = rclcpp::Duration::from_seconds(0.1);
 
     markers.markers.push_back(m_shadow);
   }
@@ -453,6 +463,14 @@ void EkfTestNode::run_action(const std::string & action_name)
   auto message = akushon_interfaces::msg::RunAction();
   message.action_name = action_name;
   run_action_publisher->publish(message);
+}
+
+void EkfTestNode::action_status_callback(const akushon_interfaces::msg::Status::SharedPtr msg)
+{
+  if (is_motion_triggered_ && !msg->is_running) {
+    run_action("walk_ready");
+    is_motion_triggered_ = false;
+  }
 }
 
 }  // namespace gyakuenki_cpp
