@@ -135,13 +135,14 @@ void EkfTestNode::dnn_detection_callback(
   }
   last_msg_time = current_msg_time;
 
-  double max_confidence = -1.0;
+  const double min_confidence = 0.65;
+  double best_score = min_confidence;
   ninshiki_interfaces::msg::DetectedObject best_ball;
   bool ball_found = false;
 
   for (const auto & obj : message->detected_objects) {
-    if (obj.label == "ball" && obj.score > max_confidence) {
-      max_confidence = obj.score;
+    if (obj.label == "ball" && obj.score >= best_score) {
+      best_score = obj.score;
       best_ball = obj;
       ball_found = true;
     }
@@ -212,7 +213,11 @@ void EkfTestNode::dnn_detection_callback(
           keisan::Matrix<2, 1> z;
           z[0][0] = projected_ball.position.x;
           z[1][0] = projected_ball.position.y;
-          ball_ekf_.update(z);
+
+          auto curr_predict_pos = ball_ekf_.getPosition();
+          double jump_distance = std::hypot(z[0][0] - curr_predict_pos[0][0], z[1][0] - curr_predict_pos[1][0]);
+
+          if (jump_distance < 2.0) ball_ekf_.update(z);
         }
       }
     } catch (std::exception & e) {
@@ -317,7 +322,7 @@ void EkfTestNode::dnn_detection_callback(
   filtered_ball.position.x = x_curr;
   filtered_ball.position.y = y_curr;
   filtered_ball.position.z = 0.0;
-  filtered_ball.confidence = max_confidence;
+  filtered_ball.confidence = min_confidence;
   published_objects.projected_objects.push_back(filtered_ball);
 
   gyakuenki_interfaces::msg::ProjectedObject shadow_ball;
@@ -325,7 +330,7 @@ void EkfTestNode::dnn_detection_callback(
   shadow_ball.position.x = shadow_x;
   shadow_ball.position.y = shadow_y;
   shadow_ball.position.z = 0.0;
-  shadow_ball.confidence = max_confidence;
+  shadow_ball.confidence = min_confidence;
   published_objects.projected_objects.push_back(shadow_ball);
 
   if (is_validating) {
@@ -334,7 +339,7 @@ void EkfTestNode::dnn_detection_callback(
     frozen_ball.position.x = frozen_x;
     frozen_ball.position.y = frozen_y;
     frozen_ball.position.z = 0.0;
-    frozen_ball.confidence = max_confidence;
+    frozen_ball.confidence = min_confidence;
     published_objects.projected_objects.push_back(frozen_ball);
   }
 
