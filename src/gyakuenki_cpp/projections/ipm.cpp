@@ -25,8 +25,8 @@
 namespace gyakuenki_cpp
 {
 
-IPM::IPM(
-  const std::shared_ptr<rclcpp::Node> & node, const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
+IPM::IPM(const std::shared_ptr<rclcpp::Node> & node,
+  const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
   const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path)
 : node(node), tf_buffer(tf_buffer), tf_listener(tf_listener), config_path(path)
 {
@@ -228,9 +228,8 @@ keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
 // nc = plane normal in camera frame, Pc = 3D point in camera frame, d = distance from origin to plane
 // Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
 // Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
-keisan::Matrix<4, 1> IPM::point_in_camera_frame(
-  const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
-  const std::string & object_label)
+keisan::Matrix<4, 1> IPM::point_in_camera_frame(const cv::Point2d & pixel,
+  const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R, const std::string & object_label)
 {
   // Get object height
   double object_height =
@@ -307,10 +306,30 @@ tf2::Transform IPM::get_corrected_camera_transform(
   return tf_final;
 }
 
+void IPM::print_horizon_line(const keisan::Matrix<4, 4> & R)
+{
+  double A = R[2][0] / this->camera_info.fx;
+  double B = R[2][1] / this->camera_info.fy;
+  double C = R[2][2] - (this->camera_info.cx * R[2][0] / this->camera_info.fx) -
+             (this->camera_info.cy * R[2][1] / this->camera_info.fy);
+
+  std::cout << "Horizon Line Eq: " << A << "u + " << B << "v + " << C << " = 0" << std::endl;
+
+  if (std::abs(B) > 1e-6) {
+    double v_start = -(A * 0 + C) / B;
+    double v_end = -(A * this->camera_info.image_width + C) / B;
+
+    std::cout << "Horizon Points: (0, " << v_start << ") to (" << this->camera_info.image_width
+              << ", " << v_end << ")" << std::endl;
+    return;
+  }
+
+  std::cout << "Horizon is vertical or undefined in this orientation." << std::endl;
+}
+
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
-gyakuenki_interfaces::msg::Point3 IPM::map_object(
-  const DetectedObject & detected_object, const rclcpp::Time & timestamp,
-  const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
+gyakuenki_interfaces::msg::Point3 IPM::map_object(const DetectedObject & detected_object,
+  const rclcpp::Time & timestamp, const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
 {
   // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
   // p = K * [R | T] * Pw
@@ -342,6 +361,8 @@ gyakuenki_interfaces::msg::Point3 IPM::map_object(
 
   // Now, we have the 3D point in camera frame
   Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
+
+  print_horizon_line(R);
 
   // But we want the 3D points relative to the output frame
   // Therefore, transform using spatial transformation

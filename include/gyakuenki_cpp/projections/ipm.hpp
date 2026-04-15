@@ -55,8 +55,8 @@ public:
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
   using Quaternion = geometry_msgs::msg::Quaternion;
 
-  IPM(
-    const std::shared_ptr<rclcpp::Node> & node, const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
+  IPM(const std::shared_ptr<rclcpp::Node> & node,
+    const std::shared_ptr<tf2_ros::Buffer> & tf_buffer,
     const std::shared_ptr<tf2_ros::TransformListener> & tf_listener, const std::string & path);
 
   std::string config_path;
@@ -72,8 +72,8 @@ public:
   tf2::Quaternion msg_to_tf2(const Quaternion & msg_quat);
   keisan::Matrix<4, 4> quat_to_rotation_matrix(const Quaternion & q);
 
-  keisan::Matrix<4, 1> point_in_camera_frame(
-    const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
+  keisan::Matrix<4, 1> point_in_camera_frame(const cv::Point2d & pixel,
+    const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
     const std::string & object_label);
 
   cv::Point2d get_target_pixel(const DetectedObject & detected_object);
@@ -82,11 +82,12 @@ public:
   tf2::Transform get_corrected_camera_transform(
     const std::string & output_frame, const rclcpp::Time & timestamp);
 
-  gyakuenki_interfaces::msg::Point3 map_object(
-    const DetectedObject & detected_object, const rclcpp::Time & timestamp,
-    const std::string & output_frame, keisan::Matrix<4, 1> & Pc);
+  gyakuenki_interfaces::msg::Point3 map_object(const DetectedObject & detected_object,
+    const rclcpp::Time & timestamp, const std::string & output_frame, keisan::Matrix<4, 1> & Pc);
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }
+
+  void print_horizon_line(const keisan::Matrix<4, 4> & R);
 
 private:
   rclcpp::Node::SharedPtr node;
