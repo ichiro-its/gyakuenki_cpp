@@ -108,6 +108,7 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
 {
   ProjectedObjects projected_objects;
+  projected_objects.header = message->header;
   MarkerArray markers;
 
   uint8_t id = 0;
