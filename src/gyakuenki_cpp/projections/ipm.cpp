@@ -242,8 +242,10 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(const cv::Point2d & pixel,
   }
   double Zc = (object_height - T[2][3]) / denominator;
 
+  std::cout << "R11: " << R[0][0] << " R12: " << R[0][1] << " R13: " << R[0][2] << std::endl;
+  std::cout << "R21: " << R[1][0] << " R22: " << R[1][1] << " R23: " << R[1][2] << std::endl;
   std::cout << "R31: " << R[2][0] << " R32: " << R[2][1] << " R33: " << R[2][2] << std::endl;
-  std::cout << "Tz: " << T[2][3] << std::endl;
+  std::cout << "Tx: " << T[0][3] << " Ty: " << T[1][3] <<  " Tz: " << T[2][3] << std::endl;
 
   if (Zc < 0) {
     throw std::runtime_error("Object is behind the camera frame!");
