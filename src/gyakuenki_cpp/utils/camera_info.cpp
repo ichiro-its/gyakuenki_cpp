@@ -25,13 +25,10 @@
 namespace gyakuenki_cpp::utils
 {
 
-CameraInfo::CameraInfo(const std::string & config_path)
-: frame_id("camera"), width(0), height(0), use_distortion(false)
+CameraInfo::CameraInfo() : frame_id("camera"), width(0), height(0), use_distortion(false)
 {
   K = cv::Mat::eye(3, 3, CV_64F);
   D = cv::Mat::zeros(1, 8, CV_64F);
-
-  load_configuration(config_path);
 }
 
 void CameraInfo::load_configuration(const std::string & config_path)

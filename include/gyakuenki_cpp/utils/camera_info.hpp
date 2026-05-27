@@ -31,7 +31,7 @@ namespace gyakuenki_cpp::utils
 class CameraInfo
 {
 public:
-  CameraInfo(const std::string & config_path);
+  CameraInfo();
   void load_configuration(const std::string & config_path);
   cv::Point2d normalize_pixel(cv::Point2d pixel);
   const std::string & get_frame_id() { return frame_id; }

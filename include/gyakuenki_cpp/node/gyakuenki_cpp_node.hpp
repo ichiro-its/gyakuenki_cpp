@@ -24,9 +24,9 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
@@ -56,6 +56,7 @@ public:
   using UpdateCameraOffset = gyakuenki_interfaces::srv::UpdateCameraOffset;
 
   void publish(const DetectedObjects::SharedPtr & message);
+  void publish_markers(const ProjectedObjects & projected_objects, const rclcpp::Time & stamp);
 
   GyakuenkiCppNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & path);
 

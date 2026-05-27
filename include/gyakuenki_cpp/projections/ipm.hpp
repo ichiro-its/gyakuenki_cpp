@@ -34,8 +34,10 @@
 #include "gyakuenki_cpp/utils/camera_info.hpp"
 #include "gyakuenki_interfaces/msg/point3.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
+#include "gyakuenki_interfaces/msg/projected_objects.hpp"
 #include "keisan/matrix.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
+#include "ninshiki_interfaces/msg/detected_objects.hpp"
 #include "nlohmann/json.hpp"
 
 namespace gyakuenki_cpp
@@ -53,6 +55,10 @@ public:
   };
 
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
+  using DetectedObjects = ninshiki_interfaces::msg::DetectedObjects;
+  using Point3 = gyakuenki_interfaces::msg::Point3;
+  using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
+  using ProjectedObjects = gyakuenki_interfaces::msg::ProjectedObjects;
   using Quaternion = geometry_msgs::msg::Quaternion;
 
   IPM(
@@ -65,12 +71,10 @@ public:
   void save_config();
 
   bool object_at_bottom_of_image(const DetectedObject & detected_object);
-  void normalize_pixel(cv::Point2d & pixel);
-  void undistort_pixel(cv::Point2d & pixel);
 
   Quaternion tf2_to_msg(const tf2::Quaternion & tf2_quat);
   tf2::Quaternion msg_to_tf2(const Quaternion & msg_quat);
-  keisan::Matrix<4, 4> quat_to_rotation_matrix(const Quaternion & q);
+  keisan::Matrix<4, 4> quat_to_rotation_matrix(const tf2::Quaternion & q);
 
   keisan::Matrix<4, 1> point_in_camera_frame(
     const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
@@ -81,10 +85,11 @@ public:
 
   tf2::Transform get_corrected_camera_transform(
     const std::string & output_frame, const rclcpp::Time & timestamp);
+  Point3 map_object(
+    const DetectedObject & detected_object, const keisan::Matrix<4, 4> & R,
+    const keisan::Matrix<4, 4> t);
 
-  gyakuenki_interfaces::msg::Point3 map_object(
-    const DetectedObject & detected_object, const rclcpp::Time & timestamp,
-    const std::string & output_frame, keisan::Matrix<4, 1> & Pc);
+  ProjectedObjects map_objects(const DetectedObjects::SharedPtr & message);
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }
 

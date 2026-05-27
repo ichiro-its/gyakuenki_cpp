@@ -31,7 +31,7 @@ IPM::IPM(
 : node(node), tf_buffer(tf_buffer), tf_listener(tf_listener), config_path(path)
 {
   // Load camera info
-  camera_info = utils::CameraInfo(path);
+  camera_info.load_configuration(path);
   load_config(path);
 }
 
@@ -163,11 +163,11 @@ tf2::Quaternion IPM::msg_to_tf2(const Quaternion & msg_quat)
 }
 
 // Convert quaternion to rotation matrix
-keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
+keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const tf2::Quaternion & q)
 {
   // Normalize the quaternion
-  double norm = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
-  keisan::Quaternion<double> quat(q.x / norm, q.y / norm, q.z / norm, q.w / norm);
+  double norm = std::sqrt(q.x() * q.x() + q.y() * q.y() + q.z() * q.z() + q.w() * q.w());
+  keisan::Quaternion<double> quat(q.x() / norm, q.y() / norm, q.z() / norm, q.w() / norm);
 
   return keisan::rotation_matrix(quat);
 }
@@ -248,8 +248,8 @@ tf2::Transform IPM::get_corrected_camera_transform(
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
 gyakuenki_interfaces::msg::Point3 IPM::map_object(
-  const DetectedObject & detected_object, const rclcpp::Time & timestamp,
-  const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
+  const DetectedObject & detected_object, const keisan::Matrix<4, 4> & R,
+  const keisan::Matrix<4, 4> t)
 {
   // Ignore object if the bounding box touches the bottom of the image
   if (object_at_bottom_of_image(detected_object)) {
@@ -258,37 +258,65 @@ gyakuenki_interfaces::msg::Point3 IPM::map_object(
 
   cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object);
 
-  // Get the camera transform with offset applied expressed in output_frame
-  tf2::Transform tf_final = get_corrected_camera_transform(output_frame, timestamp);
-
-  tf2::Quaternion q_final = tf_final.getRotation();
-  tf2::Vector3 t_final = tf_final.getOrigin();
-
-  // Convert the quaternion to rotation matrix R
-  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(tf2_to_msg(q_final));
-
-  // Get the translation matrix
-  keisan::Matrix<4, 4> T =
-    keisan::translation_matrix(keisan::Point3(t_final.x(), t_final.y(), t_final.z()));
-
   // 3D point in camera frame
-  Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
+  auto Pc = point_in_camera_frame(norm_pixel, t, R, detected_object.label);
 
   // Transform to output_frame
   keisan::Matrix<4, 4> M = R;
-  M[0][3] = T[0][3];
-  M[1][3] = T[1][3];
-  M[2][3] = T[2][3];
+  M[0][3] = t[0][3];
+  M[1][3] = t[1][3];
+  M[2][3] = t[2][3];
 
   keisan::Matrix<4, 1> Pw = M * Pc;
 
-  // Create the ProjectedObject instance
   gyakuenki_interfaces::msg::Point3 position;
   position.x = Pw[0][0];
   position.y = Pw[1][0];
   position.z = Pw[2][0];
 
   return position;
+}
+
+gyakuenki_interfaces::msg::ProjectedObjects IPM::map_objects(
+  const DetectedObjects::SharedPtr & message)
+{
+  // Get the camera transform with offset applied expressed in output_frame
+  tf2::Transform tf_final = get_corrected_camera_transform("base_footprint", message->header.stamp);
+
+  tf2::Quaternion q_final = tf_final.getRotation();
+  tf2::Vector3 t_final = tf_final.getOrigin();
+
+  // Convert the quaternion to rotation matrix R
+  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(q_final);
+
+  // Get the translation matrix
+  keisan::Matrix<4, 4> t =
+    keisan::translation_matrix(keisan::Point3(t_final.x(), t_final.y(), t_final.z()));
+
+  ProjectedObjects projected_objects;
+  projected_objects.header = message->header;
+  for (const auto & detected_object : message->detected_objects) {
+    ProjectedObject projected_object;
+
+    projected_object.label = detected_object.label;
+    projected_object.confidence = detected_object.score;
+    projected_object.left = detected_object.left;
+    projected_object.top = detected_object.top;
+    projected_object.right = detected_object.right;
+    projected_object.bottom = detected_object.bottom;
+    projected_object.has_projection = false;
+
+    try {
+      projected_object.position = map_object(detected_object, R, t);
+      projected_object.has_projection = true;
+    } catch (std::exception & e) {
+      RCLCPP_WARN(this->node->get_logger(), e.what());
+    }
+
+    projected_objects.projected_objects.push_back(projected_object);
+  }
+
+  return projected_objects;
 }
 
 }  // namespace gyakuenki_cpp
