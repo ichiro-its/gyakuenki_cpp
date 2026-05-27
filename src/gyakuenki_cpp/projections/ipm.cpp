@@ -31,7 +31,7 @@ IPM::IPM(
 : node(node), tf_buffer(tf_buffer), tf_listener(tf_listener), config_path(path)
 {
   // Load camera info
-  camera_info.load_configuration(path);
+  camera_info = utils::CameraInfo(path);
   load_config(path);
 }
 
@@ -118,57 +118,16 @@ void IPM::save_config()
 bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object)
 {
   // TODO: Handle for color detection
-  return detected_object.bottom >
-         camera_info.image_height - 5;  // TODO: Change 5 to a threshold variable
+  return detected_object.top + detected_object.bottom > camera_info.image_height() - 5;
 }
 
-void IPM::normalize_pixel(cv::Point2d & pixel)
-{
-  // x = (u - cx) / fx
-  // y = (v - cy) / fy
-  pixel.x = (pixel.x - camera_info.cx) / camera_info.fx;
-  pixel.y = (pixel.y - camera_info.cy) / camera_info.fy;
-}
-
-void IPM::undistort_pixel(cv::Point2d & pixel)
-{
-  double k1 = camera_info.D[0];
-  double k2 = camera_info.D[1];
-  double p1 = camera_info.D[2];
-  double p2 = camera_info.D[3];
-  double k3 = camera_info.D[4];
-  double k4 = camera_info.D[5];
-  double k5 = camera_info.D[6];
-  double k6 = camera_info.D[7];
-
-  // Undistort the pixel coordinates
-  double x = pixel.x;
-  double y = pixel.y;
-
-  double r2 = x * x + y * y;
-  double r4 = r2 * r2;
-  double r6 = r4 * r2;
-  double r8 = r4 * r4;
-  double r10 = r6 * r4;
-  double r12 = r6 * r6;
-
-  // Apply radial distortion
-  double radial_distortion = 1 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12;
-
-  // Apply tangential distortion
-  pixel.x = x * radial_distortion + 2 * p1 * x * y + p2 * (r2 + 2 * x * x);
-  pixel.y = y * radial_distortion + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y;
-}
-
-// Get the target pixel (i. e. u and v) that are going to be projected depending on the object
+// Get the target pixel that are going to be projected depending on the object
 cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
 {
   cv::Point2d point;
 
-  point.x = detected_object.left + (detected_object.right / 2.0);
-
-  // For goalpost and robot, v is the bottom of the detection
-  // Ball and field marks, v is the center of the detection
+  // Goalpost and robot uses bottom-center of bounding box, other object uses center of bounding box
+  point.x = detected_object.left + detected_object.right / 2;
   if (detected_object.label == "goalpost" || detected_object.label == "robot") {
     point.y = detected_object.top + detected_object.bottom;
   } else {
@@ -181,18 +140,8 @@ cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
 // Get the object's normalized XY coordinates in image plane
 cv::Point2d IPM::get_normalized_target_pixel(const DetectedObject & detected_object)
 {
-  // Get the target pixel that are going to be projected (i. e. u and v)
   cv::Point2d pixel = get_target_pixel(detected_object);
-
-  normalize_pixel(pixel);
-
-  // Un-distort the pixel coordinates if distortion is used
-  if (camera_info.use_distortion) {
-    undistort_pixel(pixel);
-  }
-
-  // Return the normalized pixel coordinates
-  return pixel;
+  return camera_info.normalize_pixel(pixel);
 }
 
 // Convert tf2::Quaternion to msg::Quaternion
@@ -224,10 +173,6 @@ keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
 }
 
 // Find Pc (3D point in camera frame) using normalized pixel
-// We will use general plane equation in camera frame: nc . Pc + d = 0
-// nc = plane normal in camera frame, Pc = 3D point in camera frame, d = distance from origin to plane
-// Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
-// Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
 keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
   const std::string & object_label)
@@ -236,7 +181,7 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   double object_height =
     object_label == "ball" ? 0.135 / 2 : 0.0;  // For ball, the height is the radius of the ball
 
-  // Calculate the Z coordinate in camera frame
+  // Calculate depth (Z)
   double denominator = R[2][0] * pixel.x + R[2][1] * pixel.y + R[2][2];
   if (std::abs(denominator) < 1e-6) {
     throw std::runtime_error("No intersection with base plane!");
@@ -251,7 +196,6 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   double Xc = Zc * pixel.x;
   double Yc = Zc * pixel.y;
 
-  // Create the 3D point in camera frame
   keisan::Matrix<4, 1> Pc(Xc, Yc, Zc, 1.0);
 
   return Pc;
@@ -259,11 +203,6 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 
 // Apply the camera translation and rotation offset to the transform from camera frame
 // to output frame (e. g. base_footprint) and return the corrected transform
-// Apply offset:
-// T_final = T_base_to_cam * T_offset
-// Also can be done by:
-// - Apply rotation: R_final = R_base_to_cam * R_offset
-// - Apply translation: t_final = R_base_to_cam * t_offset + t_base_to_cam
 tf2::Transform IPM::get_corrected_camera_transform(
   const std::string & output_frame, const rclcpp::Time & timestamp)
 {
@@ -272,14 +211,14 @@ tf2::Transform IPM::get_corrected_camera_transform(
   geometry_msgs::msg::TransformStamped t;
   try {
     if (timestamp.nanoseconds() == 0) {
-      t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+      t = tf_buffer->lookupTransform(output_frame, camera_info.get_frame_id(), tf2::TimePointZero);
     } else {
       t = tf_buffer->lookupTransform(
-        output_frame, camera_info.frame_id, timestamp, tf2::Duration::zero());
+        output_frame, camera_info.get_frame_id(), timestamp, tf2::Duration::zero());
     }
   } catch (tf2::TransformException &) {
     try {
-      t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+      t = tf_buffer->lookupTransform(output_frame, camera_info.get_frame_id(), tf2::TimePointZero);
       RCLCPP_WARN(node->get_logger(), "TF not available for capture timestamp, using latest TF");
     } catch (tf2::TransformException & ex) {
       throw std::runtime_error(ex.what());
@@ -312,24 +251,16 @@ gyakuenki_interfaces::msg::Point3 IPM::map_object(
   const DetectedObject & detected_object, const rclcpp::Time & timestamp,
   const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
 {
-  // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
-  // p = K * [R | T] * Pw
-  // where K is the camera intrinsic matrix, R is the rotation matrix and T is the translation matrix of the camera frame
-  //
-  // The idea is to reverse this process to get the 3D world points from the 2D image points
-
-  // We can not map the object if the bounding box touches the bottom of the image
+  // Ignore object if the bounding box touches the bottom of the image
   if (object_at_bottom_of_image(detected_object)) {
     throw std::runtime_error("Bounding box touches the bottom of the image, can not map object!");
   }
 
-  // First, get the normalized target pixel
   cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object);
 
-  // Get the camera transform with offset applied expressed in output_frame (e. g. base_footprint)
+  // Get the camera transform with offset applied expressed in output_frame
   tf2::Transform tf_final = get_corrected_camera_transform(output_frame, timestamp);
 
-  // Extract the rotation and translation from the final transform
   tf2::Quaternion q_final = tf_final.getRotation();
   tf2::Vector3 t_final = tf_final.getOrigin();
 
@@ -340,11 +271,10 @@ gyakuenki_interfaces::msg::Point3 IPM::map_object(
   keisan::Matrix<4, 4> T =
     keisan::translation_matrix(keisan::Point3(t_final.x(), t_final.y(), t_final.z()));
 
-  // Now, we have the 3D point in camera frame
+  // 3D point in camera frame
   Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
 
-  // But we want the 3D points relative to the output frame
-  // Therefore, transform using spatial transformation
+  // Transform to output_frame
   keisan::Matrix<4, 4> M = R;
   M[0][3] = T[0][3];
   M[1][3] = T[1][3];
