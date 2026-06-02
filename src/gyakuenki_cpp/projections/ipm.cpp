@@ -280,8 +280,18 @@ gyakuenki_interfaces::msg::Point3 IPM::map_object(
 gyakuenki_interfaces::msg::ProjectedObjects IPM::map_objects(
   const DetectedObjects::SharedPtr & message)
 {
-  // Get the camera transform with offset applied expressed in output_frame
-  tf2::Transform tf_final = get_corrected_camera_transform("base_footprint", message->header.stamp);
+  ProjectedObjects projected_objects;
+  projected_objects.header = message->header;
+
+  // Get the camera transform with offset applied expressed in output_frame  
+  tf2::Transform tf_final;  
+  try {  
+    tf_final = get_corrected_camera_transform("base_footprint", message->header.stamp);  
+  } catch (const std::exception & ex) {  
+    RCLCPP_WARN(  
+      this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());  
+    return projected_objects;  
+  } 
 
   tf2::Quaternion q_final = tf_final.getRotation();
   tf2::Vector3 t_final = tf_final.getOrigin();
@@ -293,8 +303,6 @@ gyakuenki_interfaces::msg::ProjectedObjects IPM::map_objects(
   keisan::Matrix<4, 4> t =
     keisan::translation_matrix(keisan::Point3(t_final.x(), t_final.y(), t_final.z()));
 
-  ProjectedObjects projected_objects;
-  projected_objects.header = message->header;
   for (const auto & detected_object : message->detected_objects) {
     ProjectedObject projected_object;
 
