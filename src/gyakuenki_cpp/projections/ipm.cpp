@@ -78,11 +78,26 @@ void IPM::load_config(const std::string & path)
     valid_config = false;
   }
 
+  nlohmann::json confidence_section;
+  if (jitsuyo::assign_val(config, "confidence", confidence_section)) {
+    bool valid_section = jitsuyo::assign_val(confidence_section, "horizon_scale", horizon_scale);
+
+    if (!valid_section) {
+      std::cout << "Error found at section `confidence`" << std::endl;
+      valid_config = false;
+    }
+
+  } else {
+    valid_config = false;
+  }
+
   set_config(x_double, y_double, z_double, roll_double, pitch_double, yaw_double);
 
   if (!valid_config) {
     throw std::runtime_error("Failed to set configuration file `camera_offset.json`");
   }
+
+  horizon_scale = std::fabs(horizon_scale);
 }
 
 void IPM::set_config(double x, double y, double z, double roll, double pitch, double yaw)
@@ -118,7 +133,7 @@ void IPM::save_config()
 bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object)
 {
   // TODO: Handle for color detection
-  return detected_object.top + detected_object.bottom > camera_info.image_height() - 5;
+  return detected_object.top + detected_object.bottom > camera_info.image_height() - 2;
 }
 
 // Get the target pixel that are going to be projected depending on the object
@@ -172,6 +187,20 @@ keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const tf2::Quaternion & q)
   return keisan::rotation_matrix(quat);
 }
 
+double IPM::compute_confidence()
+  const(const cv::Point2d & pixel, const keisan::Matrix<4, 4> & R, const double D)
+{
+  double A = R[2][0] / this->camera_info.fx();
+  double B = R[2][1] / this->camera_info.fy();
+  double C = R[2][2] - (this->camera_info.cx() * R[2][0] / this->camera_info.fx()) -
+             (this->camera_info.cy() * R[2][1] / this->camera_info.fy());
+
+  auto horizon_line = keisan::Line(A, B, C);
+  double distance = horizon_line.distance(keisan::Point2(pixel.x, pixel.y));
+
+  return 1.0 - std::exp(-distance / horizon_scale);
+}
+
 // Find Pc (3D point in camera frame) using normalized pixel
 keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
@@ -183,14 +212,16 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 
   // Calculate depth (Z)
   double denominator = R[2][0] * pixel.x + R[2][1] * pixel.y + R[2][2];
-  if (std::abs(denominator) < 1e-6) {
+  if (denominator >= 0) {
     throw std::runtime_error("No intersection with base plane!");
   }
-  double Zc = (object_height - T[2][3]) / denominator;
 
-  if (Zc < 0) {
-    throw std::runtime_error("Object is behind the camera frame!");
+  confidence = compute_confidence(R, denominator);
+  if (confidence < 0.5) {
+    throw std::runtime_error("Confidence is too low");
   }
+
+  double Zc = (object_height - T[2][3]) / denominator;
 
   // Calculate the X and Y coordinates in camera frame
   double Xc = Zc * pixel.x;
@@ -283,15 +314,15 @@ gyakuenki_interfaces::msg::ProjectedObjects IPM::map_objects(
   ProjectedObjects projected_objects;
   projected_objects.header = message->header;
 
-  // Get the camera transform with offset applied expressed in output_frame  
-  tf2::Transform tf_final;  
-  try {  
-    tf_final = get_corrected_camera_transform("base_footprint", message->header.stamp);  
-  } catch (const std::exception & ex) {  
-    RCLCPP_WARN(  
-      this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());  
-    return projected_objects;  
-  } 
+  // Get the camera transform with offset applied expressed in output_frame
+  tf2::Transform tf_final;
+  try {
+    tf_final = get_corrected_camera_transform("base_footprint", message->header.stamp);
+  } catch (const std::exception & ex) {
+    RCLCPP_WARN(
+      this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());
+    return projected_objects;
+  }
 
   tf2::Quaternion q_final = tf_final.getRotation();
   tf2::Vector3 t_final = tf_final.getOrigin();

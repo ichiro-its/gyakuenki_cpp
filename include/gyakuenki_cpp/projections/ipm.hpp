@@ -80,6 +80,8 @@ public:
     const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
     const std::string & object_label);
 
+  double compute_confidence(
+    const cv::Point2d & pixel, const keisan::Matrix<4, 4> & R, const double D) const;
   cv::Point2d get_target_pixel(const DetectedObject & detected_object);
   cv::Point2d get_normalized_target_pixel(const DetectedObject & detected_object);
 
@@ -102,6 +104,8 @@ private:
   CameraOffset camera_offset;
   tf2::Vector3 translation_offset;
   tf2::Quaternion rotation_offset;
+
+  double horizon_scale = 25.0;
 };
 
 }  // namespace gyakuenki_cpp
