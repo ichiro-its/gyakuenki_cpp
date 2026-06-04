@@ -80,8 +80,7 @@ public:
     const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
     const std::string & object_label);
 
-  double compute_confidence(
-    const cv::Point2d & pixel, const keisan::Matrix<4, 4> & R, const double D) const;
+  double compute_confidence(const keisan::Matrix<4, 4> & R, const double D);
   cv::Point2d get_target_pixel(const DetectedObject & detected_object);
   cv::Point2d get_normalized_target_pixel(const DetectedObject & detected_object);
 

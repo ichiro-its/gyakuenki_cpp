@@ -83,12 +83,11 @@ void IPM::load_config(const std::string & path)
     bool valid_section = jitsuyo::assign_val(confidence_section, "horizon_scale", horizon_scale);
 
     if (!valid_section) {
-      std::cout << "Error found at section `confidence`" << std::endl;
-      valid_config = false;
+      std::cerr << "WARN: Error found at section `confidence`, using default values" << std::endl;
     }
 
   } else {
-    valid_config = false;
+    std::cerr << "WARN: Error found at section `confidence`, using default values" << std::endl;
   }
 
   set_config(x_double, y_double, z_double, roll_double, pitch_double, yaw_double);
@@ -97,7 +96,7 @@ void IPM::load_config(const std::string & path)
     throw std::runtime_error("Failed to set configuration file `camera_offset.json`");
   }
 
-  horizon_scale = std::fabs(horizon_scale);
+  horizon_scale = keisan::clamp(horizon_scale, 15.0, 35.0);
 }
 
 void IPM::set_config(double x, double y, double z, double roll, double pitch, double yaw)
@@ -187,16 +186,11 @@ keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const tf2::Quaternion & q)
   return keisan::rotation_matrix(quat);
 }
 
-double IPM::compute_confidence()
-  const(const cv::Point2d & pixel, const keisan::Matrix<4, 4> & R, const double D)
+double IPM::compute_confidence(const keisan::Matrix<4, 4> & R, const double D)
 {
   double A = R[2][0] / this->camera_info.fx();
   double B = R[2][1] / this->camera_info.fy();
-  double C = R[2][2] - (this->camera_info.cx() * R[2][0] / this->camera_info.fx()) -
-             (this->camera_info.cy() * R[2][1] / this->camera_info.fy());
-
-  auto horizon_line = keisan::Line(A, B, C);
-  double distance = horizon_line.distance(keisan::Point2(pixel.x, pixel.y));
+  double distance = std::fabs(D) / std::hypot(A, B);
 
   return 1.0 - std::exp(-distance / horizon_scale);
 }
@@ -216,7 +210,7 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
     throw std::runtime_error("No intersection with base plane!");
   }
 
-  confidence = compute_confidence(R, denominator);
+  double confidence = compute_confidence(R, denominator);
   if (confidence < 0.5) {
     throw std::runtime_error("Confidence is too low");
   }
