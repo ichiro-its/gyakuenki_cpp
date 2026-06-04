@@ -78,11 +78,25 @@ void IPM::load_config(const std::string & path)
     valid_config = false;
   }
 
+  nlohmann::json confidence_section;
+  if (jitsuyo::assign_val(config, "confidence", confidence_section)) {
+    bool valid_section = jitsuyo::assign_val(confidence_section, "horizon_scale", horizon_scale);
+
+    if (!valid_section) {
+      std::cerr << "WARN: Error found at section `confidence`, using default values" << std::endl;
+    }
+
+  } else {
+    std::cerr << "WARN: Error found at section `confidence`, using default values" << std::endl;
+  }
+
   set_config(x_double, y_double, z_double, roll_double, pitch_double, yaw_double);
 
   if (!valid_config) {
     throw std::runtime_error("Failed to set configuration file `camera_offset.json`");
   }
+
+  horizon_scale = keisan::clamp(horizon_scale, 15.0, 35.0);
 }
 
 void IPM::set_config(double x, double y, double z, double roll, double pitch, double yaw)
@@ -118,57 +132,16 @@ void IPM::save_config()
 bool IPM::object_at_bottom_of_image(const DetectedObject & detected_object)
 {
   // TODO: Handle for color detection
-  return detected_object.bottom >
-         camera_info.image_height - 5;  // TODO: Change 5 to a threshold variable
+  return detected_object.top + detected_object.bottom > camera_info.image_height() - 2;
 }
 
-void IPM::normalize_pixel(cv::Point2d & pixel)
-{
-  // x = (u - cx) / fx
-  // y = (v - cy) / fy
-  pixel.x = (pixel.x - camera_info.cx) / camera_info.fx;
-  pixel.y = (pixel.y - camera_info.cy) / camera_info.fy;
-}
-
-void IPM::undistort_pixel(cv::Point2d & pixel)
-{
-  double k1 = camera_info.D[0];
-  double k2 = camera_info.D[1];
-  double p1 = camera_info.D[2];
-  double p2 = camera_info.D[3];
-  double k3 = camera_info.D[4];
-  double k4 = camera_info.D[5];
-  double k5 = camera_info.D[6];
-  double k6 = camera_info.D[7];
-
-  // Undistort the pixel coordinates
-  double x = pixel.x;
-  double y = pixel.y;
-
-  double r2 = x * x + y * y;
-  double r4 = r2 * r2;
-  double r6 = r4 * r2;
-  double r8 = r4 * r4;
-  double r10 = r6 * r4;
-  double r12 = r6 * r6;
-
-  // Apply radial distortion
-  double radial_distortion = 1 + k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8 + k5 * r10 + k6 * r12;
-
-  // Apply tangential distortion
-  pixel.x = x * radial_distortion + 2 * p1 * x * y + p2 * (r2 + 2 * x * x);
-  pixel.y = y * radial_distortion + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y;
-}
-
-// Get the target pixel (i. e. u and v) that are going to be projected depending on the object
+// Get the target pixel that are going to be projected depending on the object
 cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
 {
   cv::Point2d point;
 
-  point.x = detected_object.left + (detected_object.right / 2.0);
-
-  // For goalpost and robot, v is the bottom of the detection
-  // Ball and field marks, v is the center of the detection
+  // Goalpost and robot uses bottom-center of bounding box, other object uses center of bounding box
+  point.x = detected_object.left + detected_object.right / 2;
   if (detected_object.label == "goalpost" || detected_object.label == "robot") {
     point.y = detected_object.top + detected_object.bottom;
   } else {
@@ -181,18 +154,8 @@ cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
 // Get the object's normalized XY coordinates in image plane
 cv::Point2d IPM::get_normalized_target_pixel(const DetectedObject & detected_object)
 {
-  // Get the target pixel that are going to be projected (i. e. u and v)
   cv::Point2d pixel = get_target_pixel(detected_object);
-
-  normalize_pixel(pixel);
-
-  // Un-distort the pixel coordinates if distortion is used
-  if (camera_info.use_distortion) {
-    undistort_pixel(pixel);
-  }
-
-  // Return the normalized pixel coordinates
-  return pixel;
+  return camera_info.normalize_pixel(pixel);
 }
 
 // Convert tf2::Quaternion to msg::Quaternion
@@ -214,20 +177,25 @@ tf2::Quaternion IPM::msg_to_tf2(const Quaternion & msg_quat)
 }
 
 // Convert quaternion to rotation matrix
-keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const Quaternion & q)
+keisan::Matrix<4, 4> IPM::quat_to_rotation_matrix(const tf2::Quaternion & q)
 {
   // Normalize the quaternion
-  double norm = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
-  keisan::Quaternion<double> quat(q.x / norm, q.y / norm, q.z / norm, q.w / norm);
+  double norm = std::sqrt(q.x() * q.x() + q.y() * q.y() + q.z() * q.z() + q.w() * q.w());
+  keisan::Quaternion<double> quat(q.x() / norm, q.y() / norm, q.z() / norm, q.w() / norm);
 
   return keisan::rotation_matrix(quat);
 }
 
+double IPM::compute_confidence(const keisan::Matrix<4, 4> & R, const double D)
+{
+  double A = R[2][0] / this->camera_info.fx();
+  double B = R[2][1] / this->camera_info.fy();
+  double distance = std::fabs(D) / std::hypot(A, B);
+
+  return 1.0 - std::exp(-distance / horizon_scale);
+}
+
 // Find Pc (3D point in camera frame) using normalized pixel
-// We will use general plane equation in camera frame: nc . Pc + d = 0
-// nc = plane normal in camera frame, Pc = 3D point in camera frame, d = distance from origin to plane
-// Since the object lies on the ground plane, the normal vector of base frame is [0, 0, 1]
-// Therefore, nc = R . [0, 0, 1] and d is the height offset between camera frame and object height
 keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   const cv::Point2d & pixel, const keisan::Matrix<4, 4> & T, const keisan::Matrix<4, 4> & R,
   const std::string & object_label)
@@ -236,22 +204,23 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   double object_height =
     object_label == "ball" ? 0.135 / 2 : 0.0;  // For ball, the height is the radius of the ball
 
-  // Calculate the Z coordinate in camera frame
+  // Calculate depth (Z)
   double denominator = R[2][0] * pixel.x + R[2][1] * pixel.y + R[2][2];
-  if (std::abs(denominator) < 1e-6) {
+  if (denominator >= 0) {
     throw std::runtime_error("No intersection with base plane!");
   }
-  double Zc = (object_height - T[2][3]) / denominator;
 
-  if (Zc < 0) {
-    throw std::runtime_error("Object is behind the camera frame!");
+  double confidence = compute_confidence(R, denominator);
+  if (confidence < 0.5) {
+    throw std::runtime_error("Confidence is too low");
   }
+
+  double Zc = (object_height - T[2][3]) / denominator;
 
   // Calculate the X and Y coordinates in camera frame
   double Xc = Zc * pixel.x;
   double Yc = Zc * pixel.y;
 
-  // Create the 3D point in camera frame
   keisan::Matrix<4, 1> Pc(Xc, Yc, Zc, 1.0);
 
   return Pc;
@@ -259,11 +228,6 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
 
 // Apply the camera translation and rotation offset to the transform from camera frame
 // to output frame (e. g. base_footprint) and return the corrected transform
-// Apply offset:
-// T_final = T_base_to_cam * T_offset
-// Also can be done by:
-// - Apply rotation: R_final = R_base_to_cam * R_offset
-// - Apply translation: t_final = R_base_to_cam * t_offset + t_base_to_cam
 tf2::Transform IPM::get_corrected_camera_transform(
   const std::string & output_frame, const rclcpp::Time & timestamp)
 {
@@ -272,14 +236,14 @@ tf2::Transform IPM::get_corrected_camera_transform(
   geometry_msgs::msg::TransformStamped t;
   try {
     if (timestamp.nanoseconds() == 0) {
-      t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+      t = tf_buffer->lookupTransform(output_frame, camera_info.get_frame_id(), tf2::TimePointZero);
     } else {
       t = tf_buffer->lookupTransform(
-        output_frame, camera_info.frame_id, timestamp, tf2::Duration::zero());
+        output_frame, camera_info.get_frame_id(), timestamp, tf2::Duration::zero());
     }
   } catch (tf2::TransformException &) {
     try {
-      t = tf_buffer->lookupTransform(output_frame, camera_info.frame_id, tf2::TimePointZero);
+      t = tf_buffer->lookupTransform(output_frame, camera_info.get_frame_id(), tf2::TimePointZero);
       RCLCPP_WARN(node->get_logger(), "TF not available for capture timestamp, using latest TF");
     } catch (tf2::TransformException & ex) {
       throw std::runtime_error(ex.what());
@@ -309,56 +273,83 @@ tf2::Transform IPM::get_corrected_camera_transform(
 
 // Map the detected object to the 3D world relative to param output_frame (e. g. base_footprint) using pinhole camera model
 gyakuenki_interfaces::msg::Point3 IPM::map_object(
-  const DetectedObject & detected_object, const rclcpp::Time & timestamp,
-  const std::string & output_frame, keisan::Matrix<4, 1> & Pc)
+  const DetectedObject & detected_object, const keisan::Matrix<4, 4> & R,
+  const keisan::Matrix<4, 4> t)
 {
-  // The relationship between 3D world points Pw = [Xw, Yw, Zw, 1] and 2D image pixels p = [u, v, 1] is given by:
-  // p = K * [R | T] * Pw
-  // where K is the camera intrinsic matrix, R is the rotation matrix and T is the translation matrix of the camera frame
-  //
-  // The idea is to reverse this process to get the 3D world points from the 2D image points
-
-  // We can not map the object if the bounding box touches the bottom of the image
+  // Ignore object if the bounding box touches the bottom of the image
   if (object_at_bottom_of_image(detected_object)) {
     throw std::runtime_error("Bounding box touches the bottom of the image, can not map object!");
   }
 
-  // First, get the normalized target pixel
   cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object);
 
-  // Get the camera transform with offset applied expressed in output_frame (e. g. base_footprint)
-  tf2::Transform tf_final = get_corrected_camera_transform(output_frame, timestamp);
+  // 3D point in camera frame
+  auto Pc = point_in_camera_frame(norm_pixel, t, R, detected_object.label);
 
-  // Extract the rotation and translation from the final transform
-  tf2::Quaternion q_final = tf_final.getRotation();
-  tf2::Vector3 t_final = tf_final.getOrigin();
-
-  // Convert the quaternion to rotation matrix R
-  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(tf2_to_msg(q_final));
-
-  // Get the translation matrix
-  keisan::Matrix<4, 4> T =
-    keisan::translation_matrix(keisan::Point3(t_final.x(), t_final.y(), t_final.z()));
-
-  // Now, we have the 3D point in camera frame
-  Pc = point_in_camera_frame(norm_pixel, T, R, detected_object.label);
-
-  // But we want the 3D points relative to the output frame
-  // Therefore, transform using spatial transformation
+  // Transform to output_frame
   keisan::Matrix<4, 4> M = R;
-  M[0][3] = T[0][3];
-  M[1][3] = T[1][3];
-  M[2][3] = T[2][3];
+  M[0][3] = t[0][3];
+  M[1][3] = t[1][3];
+  M[2][3] = t[2][3];
 
   keisan::Matrix<4, 1> Pw = M * Pc;
 
-  // Create the ProjectedObject instance
   gyakuenki_interfaces::msg::Point3 position;
   position.x = Pw[0][0];
   position.y = Pw[1][0];
   position.z = Pw[2][0];
 
   return position;
+}
+
+gyakuenki_interfaces::msg::ProjectedObjects IPM::map_objects(
+  const DetectedObjects::SharedPtr & message)
+{
+  ProjectedObjects projected_objects;
+  projected_objects.header = message->header;
+
+  // Get the camera transform with offset applied expressed in output_frame
+  tf2::Transform tf_final;
+  try {
+    tf_final = get_corrected_camera_transform("base_footprint", message->header.stamp);
+  } catch (const std::exception & ex) {
+    RCLCPP_WARN(
+      this->node->get_logger(), "Could not get corrected camera transform: %s", ex.what());
+    return projected_objects;
+  }
+
+  tf2::Quaternion q_final = tf_final.getRotation();
+  tf2::Vector3 t_final = tf_final.getOrigin();
+
+  // Convert the quaternion to rotation matrix R
+  keisan::Matrix<4, 4> R = quat_to_rotation_matrix(q_final);
+
+  // Get the translation matrix
+  keisan::Matrix<4, 4> t =
+    keisan::translation_matrix(keisan::Point3(t_final.x(), t_final.y(), t_final.z()));
+
+  for (const auto & detected_object : message->detected_objects) {
+    ProjectedObject projected_object;
+
+    projected_object.label = detected_object.label;
+    projected_object.confidence = detected_object.score;
+    projected_object.left = detected_object.left;
+    projected_object.top = detected_object.top;
+    projected_object.right = detected_object.right;
+    projected_object.bottom = detected_object.bottom;
+    projected_object.has_projection = false;
+
+    try {
+      projected_object.position = map_object(detected_object, R, t);
+      projected_object.has_projection = true;
+    } catch (std::exception & e) {
+      RCLCPP_WARN(this->node->get_logger(), e.what());
+    }
+
+    projected_objects.projected_objects.push_back(projected_object);
+  }
+
+  return projected_objects;
 }
 
 }  // namespace gyakuenki_cpp

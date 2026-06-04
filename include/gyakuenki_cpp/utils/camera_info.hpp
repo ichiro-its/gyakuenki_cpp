@@ -28,20 +28,39 @@
 namespace gyakuenki_cpp::utils
 {
 
-struct CameraInfo
+class CameraInfo
 {
-  std::string frame_id;   // Camera frame id
-  double fx;              // Focal length x
-  double fy;              // Focal length y
-  double cx;              // Principal point x
-  double cy;              // Principal point y
-  std::vector<double> D;  // Distortion coefficients
-  int image_width;        // Image width
-  int image_height;       // Image height
-  bool use_distortion;    // Use distortion coefficients
-
+public:
   CameraInfo();
   void load_configuration(const std::string & config_path);
+  cv::Point2d normalize_pixel(cv::Point2d pixel);
+  const std::string & get_frame_id() { return frame_id; }
+
+  int image_width() { return width; }
+  int image_height() { return height; }
+
+  double fx() { return K.at<double>(0, 0); }
+  double fy() { return K.at<double>(1, 1); }
+  double cx() { return K.at<double>(0, 2); }
+  double cy() { return K.at<double>(1, 2); }
+
+  double k1() { return D.at<double>(0); }
+  double k2() { return D.at<double>(1); }
+  double p1() { return D.at<double>(2); }
+  double p2() { return D.at<double>(3); }
+  double k3() { return D.at<double>(4); }
+  double k4() { return D.at<double>(5); }
+  double k5() { return D.at<double>(6); }
+  double k6() { return D.at<double>(7); }
+
+private:
+  std::string frame_id;
+  cv::Mat K;  // intrinsic camera matrix
+  cv::Mat D;  // distortion coefficients
+
+  bool use_distortion;
+  int width;
+  int height;
 };
 
 }  // namespace gyakuenki_cpp::utils

@@ -107,93 +107,81 @@ GyakuenkiCppNode::GyakuenkiCppNode(
 
 void GyakuenkiCppNode::publish(const DetectedObjects::SharedPtr & message)
 {
-  ProjectedObjects projected_objects;
-  projected_objects.header = message->header;
-  MarkerArray markers;
-
-  uint8_t id = 0;
-  for (const auto & detected_object : message->detected_objects) {
-    ProjectedObject projected_object;
-
-    projected_object.label = detected_object.label;
-    projected_object.confidence = detected_object.score;
-    projected_object.left = detected_object.left;
-    projected_object.top = detected_object.top;
-    projected_object.right = detected_object.right;
-    projected_object.bottom = detected_object.bottom;
-    projected_object.has_projection = false;
-
-    try {
-      keisan::Matrix<4, 1> Pc;
-      Point3 position =
-        this->ipm->map_object(detected_object, message->header.stamp, "base_footprint", Pc);
-
-      projected_object.position = position;
-      projected_object.has_projection = true;
-
-      Marker marker;
-      marker.header.frame_id = "camera";
-      marker.header.stamp = node->now();
-      marker.ns = projected_object.label;
-      marker.id = id++;
-
-      if (projected_object.label == "ball") {
-        marker.type = Marker::SPHERE;
-        marker.color.r = 1.0;
-        marker.color.g = 0.0;
-        marker.color.b = 0.0;
-      } else if (projected_object.label == "goalpost") {
-        marker.type = Marker::CUBE;
-        marker.color.r = 1.0;
-        marker.color.g = 1.0;
-        marker.color.b = 1.0;
-      } else if (projected_object.label == "robot") {
-        marker.type = Marker::CYLINDER;
-        marker.color.r = 0.0;
-        marker.color.g = 0.0;
-        marker.color.b = 1.0;
-      } else if (projected_object.label == "L-intersection") {
-        marker.type = Marker::LINE_LIST;
-        marker.color.r = 0.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
-      } else if (projected_object.label == "T-intersection") {
-        marker.type = Marker::LINE_LIST;
-        marker.color.r = 1.0;
-        marker.color.g = 0.0;
-        marker.color.b = 1.0;
-      } else if (projected_object.label == "X-intersection") {
-        marker.type = Marker::LINE_LIST;
-        marker.color.r = 1.0;
-        marker.color.g = 1.0;
-        marker.color.b = 0.0;
-      }
-
-      marker.action = Marker::ADD;
-      marker.pose.position.x = Pc[0][0];
-      marker.pose.position.y = Pc[1][0];
-      marker.pose.position.z = Pc[2][0];
-
-      marker.pose.orientation.x = 0.0;
-      marker.pose.orientation.y = 0.0;
-      marker.pose.orientation.z = 0.0;
-      marker.pose.orientation.w = 1.0;
-
-      marker.scale.x = 0.05;
-      marker.scale.y = 0.05;
-      marker.scale.z = 0.05;
-
-      marker.color.a = 1.0;
-
-      markers.markers.push_back(marker);
-    } catch (std::exception & e) {
-      RCLCPP_WARN(this->node->get_logger(), e.what());
-    }
-
-    projected_objects.projected_objects.push_back(projected_object);
-  }
+  auto projected_objects = this->ipm->map_objects(message);
 
   projected_objects_publisher->publish(projected_objects);
+  publish_markers(projected_objects, message->header.stamp);
+}
+
+void GyakuenkiCppNode::publish_markers(
+  const gyakuenki_interfaces::msg::ProjectedObjects & projected_objects, const rclcpp::Time & stamp)
+{
+  MarkerArray markers;
+  uint8_t id = 0;
+
+  for (const auto & obj : projected_objects.projected_objects) {
+    if (!obj.has_projection) {
+      continue;
+    }
+
+    Marker marker;
+    marker.header.frame_id = "base_footprint";
+    marker.header.stamp = stamp;
+    marker.ns = obj.label;
+    marker.id = id++;
+
+    if (obj.label == "ball") {
+      marker.type = Marker::SPHERE;
+      marker.color.r = 1.0;
+      marker.color.g = 0.0;
+      marker.color.b = 0.0;
+    } else if (obj.label == "goalpost") {
+      marker.type = Marker::CUBE;
+      marker.color.r = 1.0;
+      marker.color.g = 1.0;
+      marker.color.b = 1.0;
+    } else if (obj.label == "robot") {
+      marker.type = Marker::CYLINDER;
+      marker.color.r = 0.0;
+      marker.color.g = 0.0;
+      marker.color.b = 1.0;
+    } else if (obj.label == "L-intersection") {
+      marker.type = Marker::LINE_LIST;
+      marker.color.r = 0.0;
+      marker.color.g = 1.0;
+      marker.color.b = 0.0;
+    } else if (obj.label == "T-intersection") {
+      marker.type = Marker::LINE_LIST;
+      marker.color.r = 1.0;
+      marker.color.g = 0.0;
+      marker.color.b = 1.0;
+    } else {  // X-intersection
+      marker.type = Marker::LINE_LIST;
+      marker.color.r = 1.0;
+      marker.color.g = 1.0;
+      marker.color.b = 0.0;
+    }
+
+    marker.action = Marker::ADD;
+
+    marker.pose.position.x = obj.position.x;
+    marker.pose.position.y = obj.position.y;
+    marker.pose.position.z = obj.position.z;
+
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+
+    marker.scale.x = 0.05;
+    marker.scale.y = 0.05;
+    marker.scale.z = 0.05;
+    marker.color.a = 1.0;
+
+    markers.markers.push_back(marker);
+  }
+
   markers_publisher->publish(markers);
 }
+
 }  // namespace gyakuenki_cpp

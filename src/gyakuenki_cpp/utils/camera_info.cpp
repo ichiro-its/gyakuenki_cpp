@@ -25,17 +25,10 @@
 namespace gyakuenki_cpp::utils
 {
 
-CameraInfo::CameraInfo()
-: frame_id("camera"),
-  fx(0.0),
-  fy(0.0),
-  cx(0.0),
-  cy(0.0),
-  D(8),
-  image_width(0),
-  image_height(0),
-  use_distortion(false)
+CameraInfo::CameraInfo() : frame_id("camera"), width(0), height(0), use_distortion(false)
 {
+  K = cv::Mat::eye(3, 3, CV_64F);
+  D = cv::Mat::zeros(1, 8, CV_64F);
 }
 
 void CameraInfo::load_configuration(const std::string & config_path)
@@ -50,10 +43,16 @@ void CameraInfo::load_configuration(const std::string & config_path)
 
   nlohmann::json camera_matrix_section;
   if (jitsuyo::assign_val(config, "camera_matrix", camera_matrix_section)) {
+    double fx, fy, cx, cy;
     bool valid_section = jitsuyo::assign_val(camera_matrix_section, "fx", fx);
     valid_section &= jitsuyo::assign_val(camera_matrix_section, "fy", fy);
     valid_section &= jitsuyo::assign_val(camera_matrix_section, "cx", cx);
     valid_section &= jitsuyo::assign_val(camera_matrix_section, "cy", cy);
+
+    K.at<double>(0, 0) = fx;
+    K.at<double>(1, 1) = fy;
+    K.at<double>(0, 2) = cx;
+    K.at<double>(1, 2) = cy;
 
     if (!valid_section) {
       std::cout << "Error found at section `camera_matrix`" << std::endl;
@@ -79,14 +78,14 @@ void CameraInfo::load_configuration(const std::string & config_path)
       valid_section &= jitsuyo::assign_val(distortion_section, "k5", k5);
       valid_section &= jitsuyo::assign_val(distortion_section, "k6", k6);
 
-      D.at(0) = k1;
-      D.at(1) = k2;
-      D.at(2) = p1;
-      D.at(3) = p2;
-      D.at(4) = k3;
-      D.at(5) = k4;
-      D.at(6) = k5;
-      D.at(7) = k6;
+      D.at<double>(0) = k1;
+      D.at<double>(1) = k2;
+      D.at<double>(2) = p1;
+      D.at<double>(3) = p2;
+      D.at<double>(4) = k3;
+      D.at<double>(5) = k4;
+      D.at<double>(6) = k5;
+      D.at<double>(7) = k6;
     }
 
     if (!valid_section) {
@@ -99,8 +98,8 @@ void CameraInfo::load_configuration(const std::string & config_path)
 
   nlohmann::json image_section;
   if (jitsuyo::assign_val(config, "image", image_section)) {
-    bool valid_section = jitsuyo::assign_val(image_section, "width", image_width);
-    valid_section &= jitsuyo::assign_val(image_section, "height", image_height);
+    bool valid_section = jitsuyo::assign_val(image_section, "width", width);
+    valid_section &= jitsuyo::assign_val(image_section, "height", height);
 
     if (!valid_section) {
       std::cout << "Error found at section `image`" << std::endl;
@@ -113,6 +112,22 @@ void CameraInfo::load_configuration(const std::string & config_path)
   if (!valid_config) {
     throw std::runtime_error("Invalid camera configuration");
   }
+}
+
+cv::Point2d CameraInfo::normalize_pixel(cv::Point2d pixel)
+{
+  if (use_distortion) {
+    std::vector<cv::Point2d> distorted_pts = {pixel};
+    std::vector<cv::Point2d> undistorted_pts;
+
+    cv::undistortPoints(distorted_pts, undistorted_pts, K, D, cv::noArray(), cv::noArray());
+
+    return undistorted_pts[0];
+  }
+
+  double x = (pixel.x - cx()) / fx();
+  double y = (pixel.y - cy()) / fy();
+  return cv::Point2d(x, y);
 }
 
 }  // namespace gyakuenki_cpp::utils
