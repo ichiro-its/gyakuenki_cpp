@@ -26,6 +26,7 @@
 
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <memory>
+#include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -36,6 +37,7 @@
 #include "gyakuenki_interfaces/msg/projected_objects.hpp"
 #include "gyakuenki_interfaces/srv/get_camera_offset.hpp"
 #include "gyakuenki_interfaces/srv/update_camera_offset.hpp"
+#include "ninshiki_interfaces/msg/contours.hpp"
 #include "ninshiki_interfaces/msg/detected_object.hpp"
 #include "ninshiki_interfaces/msg/detected_objects.hpp"
 
@@ -54,9 +56,11 @@ public:
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
   using GetCameraOffset = gyakuenki_interfaces::srv::GetCameraOffset;
   using UpdateCameraOffset = gyakuenki_interfaces::srv::UpdateCameraOffset;
+  using Contours = ninshiki_interfaces::msg::Contours;
 
   void publish(const DetectedObjects::SharedPtr & message);
   void publish_markers(const ProjectedObjects & projected_objects, const rclcpp::Time & stamp);
+  void process_line_contours(const Contours::SharedPtr & message);
 
   GyakuenkiCppNode(const std::shared_ptr<rclcpp::Node> & node, const std::string & path);
 
@@ -79,6 +83,12 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr corrected_camera_publisher;
 
   rclcpp::TimerBase::SharedPtr node_timer;
+
+  rclcpp::Subscription<Contours>::SharedPtr color_detection_subscriber;
+  rclcpp::Publisher<ProjectedObjects>::SharedPtr projected_lines_publisher;
+
+  int max_line_points;
+  double min_field_contour_area;
 };
 
 }  // namespace gyakuenki_cpp

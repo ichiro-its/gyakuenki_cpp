@@ -20,6 +20,9 @@
 
 #include "gyakuenki_cpp/node/gyakuenki_cpp_node.hpp"
 
+#include "jitsuyo/config.hpp"
+#include "nlohmann/json.hpp"
+
 using namespace std::chrono_literals;
 
 namespace gyakuenki_cpp
@@ -36,6 +39,26 @@ GyakuenkiCppNode::GyakuenkiCppNode(
   tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
 
   ipm = std::make_shared<IPM>(node, tf_buffer, tf_listener, config_path);
+
+  // Line extraction config (optional section, defaults preserved when absent)
+  max_line_points = 15;
+  min_field_contour_area = 200.0;
+
+  nlohmann::json offset_config;
+  if (jitsuyo::load_config(config_path, "camera_offset.json", offset_config)) {
+    nlohmann::json line_section;
+    if (jitsuyo::assign_val(offset_config, "line_extraction", line_section)) {
+      jitsuyo::assign_val(line_section, "max_points", max_line_points);
+      jitsuyo::assign_val(line_section, "min_field_contour_area", min_field_contour_area);
+    }
+  }
+
+  projected_lines_publisher =
+    node->create_publisher<ProjectedObjects>("gyakuenki_cpp/projected_lines", 10);
+
+  color_detection_subscriber = node->create_subscription<Contours>(
+    "ninshiki_cpp/color_detection", 10,
+    [this](const Contours::SharedPtr message) { this->process_line_contours(message); });
 
   projected_objects_publisher =
     node->create_publisher<ProjectedObjects>("gyakuenki_cpp/projected_objects", 10);
@@ -155,6 +178,11 @@ void GyakuenkiCppNode::publish_markers(
       marker.color.r = 1.0;
       marker.color.g = 0.0;
       marker.color.b = 1.0;
+    } else if (obj.label == "line") {
+      marker.type = Marker::SPHERE;
+      marker.color.r = 1.0;
+      marker.color.g = 1.0;
+      marker.color.b = 1.0;
     } else {  // X-intersection
       marker.type = Marker::LINE_LIST;
       marker.color.r = 1.0;
@@ -182,6 +210,104 @@ void GyakuenkiCppNode::publish_markers(
   }
 
   markers_publisher->publish(markers);
+}
+
+void GyakuenkiCppNode::process_line_contours(const Contours::SharedPtr & message)
+{
+  ProjectedObjects projected_lines;
+  projected_lines.header = message->header;
+
+  int width = ipm->get_camera_info().image_width();
+  int height = ipm->get_camera_info().image_height();
+
+  std::vector<cv::Point> field_points;
+  std::vector<std::vector<cv::Point>> white_polygons;
+
+  for (const auto & contour : message->contours) {
+    std::vector<cv::Point> points;
+    points.reserve(contour.contour.size());
+    for (const auto & point : contour.contour) {
+      points.emplace_back(static_cast<int>(point.x), static_cast<int>(point.y));
+    }
+
+    if (points.size() < 3) {
+      continue;
+    }
+
+    if (contour.name == "field") {
+      if (cv::contourArea(points) < min_field_contour_area) {
+        continue;
+      }
+      field_points.insert(field_points.end(), points.begin(), points.end());
+    } else if (contour.name == "white") {
+      white_polygons.push_back(points);
+    }
+  }
+
+  if (field_points.size() >= 3 && !white_polygons.empty()) {
+    // Field mask: convex hull over all field contours, same recipe basho uses
+    std::vector<cv::Point> hull;
+    cv::convexHull(field_points, hull);
+
+    cv::Mat field_mask = cv::Mat::zeros(height, width, CV_8UC1);
+    cv::fillConvexPoly(field_mask, hull, 255);
+
+    cv::Mat white_mask = cv::Mat::zeros(height, width, CV_8UC1);
+    cv::fillPoly(white_mask, white_polygons, 255);
+
+    // Keep only white pixels inside the field
+    cv::Mat line_mask;
+    cv::bitwise_and(field_mask, white_mask, line_mask);
+
+    std::vector<cv::Point> line_pixels;
+    cv::findNonZero(line_mask, line_pixels);
+
+    if (!line_pixels.empty()) {
+      try {
+        tf2::Transform tf_final =
+          ipm->get_corrected_camera_transform("base_footprint", message->header.stamp);
+
+        keisan::Matrix<4, 4> R = ipm->quat_to_rotation_matrix(tf_final.getRotation());
+        keisan::Matrix<4, 4> t = keisan::translation_matrix(keisan::Point3(
+          tf_final.getOrigin().x(), tf_final.getOrigin().y(), tf_final.getOrigin().z()));
+
+        // findNonZero returns pixels row-major from the top; iterate from the
+        // end so sampling favors lower rows (closer = smaller projection error)
+        int step = std::max(1, static_cast<int>(line_pixels.size()) / max_line_points);
+        int sampled = 0;
+
+        for (int i = static_cast<int>(line_pixels.size()) - 1;
+             i >= 0 && sampled < max_line_points; i -= step) {
+          cv::Point2d pixel(line_pixels[i].x, line_pixels[i].y);
+
+          ProjectedObject projected_line;
+          projected_line.label = "line";
+          projected_line.confidence = 1.0;
+          projected_line.left = line_pixels[i].x;
+          projected_line.top = line_pixels[i].y;
+          projected_line.right = 0;
+          projected_line.bottom = 0;
+          projected_line.has_projection = false;
+
+          try {
+            projected_line.position = ipm->map_pixel(pixel, R, t, "line");
+            projected_line.has_projection = true;
+            sampled++;
+            projected_lines.projected_objects.push_back(projected_line);
+          } catch (const std::exception &) {
+            // Horizon-confidence or plane-intersection rejection; skip this point
+          }
+        }
+      } catch (const std::exception & ex) {
+        RCLCPP_WARN(
+          this->node->get_logger(), "Could not get camera transform for lines: %s", ex.what());
+      }
+    }
+  }
+
+  // Publish even when empty so the consumer clears stale line observations
+  projected_lines_publisher->publish(projected_lines);
+  publish_markers(projected_lines, message->header.stamp);
 }
 
 }  // namespace gyakuenki_cpp

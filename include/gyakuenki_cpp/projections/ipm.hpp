@@ -90,9 +90,14 @@ public:
     const DetectedObject & detected_object, const keisan::Matrix<4, 4> & R,
     const keisan::Matrix<4, 4> t);
 
+  Point3 map_pixel(
+    const cv::Point2d & pixel, const keisan::Matrix<4, 4> & R, const keisan::Matrix<4, 4> & t,
+    const std::string & label);
+
   ProjectedObjects map_objects(const DetectedObjects::SharedPtr & message);
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }
+  utils::CameraInfo & get_camera_info() { return camera_info; }
 
 private:
   rclcpp::Node::SharedPtr node;

@@ -281,10 +281,18 @@ gyakuenki_interfaces::msg::Point3 IPM::map_object(
     throw std::runtime_error("Bounding box touches the bottom of the image, can not map object!");
   }
 
-  cv::Point2d norm_pixel = get_normalized_target_pixel(detected_object);
+  return map_pixel(get_target_pixel(detected_object), R, t, detected_object.label);
+}
+
+// Map a raw image pixel that lies on the ground plane to the 3D world
+gyakuenki_interfaces::msg::Point3 IPM::map_pixel(
+  const cv::Point2d & pixel, const keisan::Matrix<4, 4> & R, const keisan::Matrix<4, 4> & t,
+  const std::string & label)
+{
+  cv::Point2d norm_pixel = camera_info.normalize_pixel(pixel);
 
   // 3D point in camera frame
-  auto Pc = point_in_camera_frame(norm_pixel, t, R, detected_object.label);
+  auto Pc = point_in_camera_frame(norm_pixel, t, R, label);
 
   // Transform to output_frame
   keisan::Matrix<4, 4> M = R;
