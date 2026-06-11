@@ -49,9 +49,12 @@ public:
   struct CameraOffset
   {
     keisan::Point3 position;
-    keisan::Angle<double> roll;
-    keisan::Angle<double> pitch;
-    keisan::Angle<double> yaw;
+    keisan::Angle<double> roll_center;
+    keisan::Angle<double> pitch_center;
+    keisan::Angle<double> yaw_center;
+    keisan::Angle<double> roll_side;
+    keisan::Angle<double> pitch_side;
+    keisan::Angle<double> yaw_side;
   };
 
   using DetectedObject = ninshiki_interfaces::msg::DetectedObject;
@@ -67,7 +70,10 @@ public:
 
   std::string config_path;
   void load_config(const std::string & path);
-  void set_config(double x, double y, double z, double roll, double pitch, double yaw);
+  void set_config(
+    double x, double y, double z,
+    double roll_center, double pitch_center, double yaw_center,
+    double roll_side, double pitch_side, double yaw_side);
   void save_config();
 
   bool object_at_bottom_of_image(const DetectedObject & detected_object);
@@ -84,6 +90,8 @@ public:
   cv::Point2d get_target_pixel(const DetectedObject & detected_object);
   cv::Point2d get_normalized_target_pixel(const DetectedObject & detected_object);
 
+  double get_head_pan_from_tf(const rclcpp::Time & timestamp);
+  tf2::Quaternion interpolate_rotation_offset(double pan_rad);
   tf2::Transform get_corrected_camera_transform(
     const std::string & output_frame, const rclcpp::Time & timestamp);
   Point3 map_object(
@@ -94,6 +102,8 @@ public:
 
   const CameraOffset & get_camera_offset() const { return camera_offset; }
 
+  keisan::Angle<double> head_pan;
+
 private:
   rclcpp::Node::SharedPtr node;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
@@ -102,7 +112,8 @@ private:
   utils::CameraInfo camera_info;
   CameraOffset camera_offset;
   tf2::Vector3 translation_offset;
-  tf2::Quaternion rotation_offset;
+  tf2::Quaternion rotation_offset_center;
+  tf2::Quaternion rotation_offset_side;
 
   double horizon_scale = 25.0;
 };

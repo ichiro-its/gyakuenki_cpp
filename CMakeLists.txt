@@ -29,6 +29,7 @@ find_package(jitsuyo REQUIRED)
 find_package(keisan REQUIRED)
 find_package(ninshiki_interfaces REQUIRED)
 find_package(gyakuenki_interfaces REQUIRED)
+find_package(atama_interfaces REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
   "src/${PROJECT_NAME}/node/gyakuenki_cpp_node.cpp"
@@ -46,7 +47,8 @@ ament_target_dependencies(${PROJECT_NAME}
   jitsuyo
   keisan
   ninshiki_interfaces
-  gyakuenki_interfaces)
+  gyakuenki_interfaces
+  atama_interfaces)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -86,7 +88,8 @@ ament_export_dependencies(
   jitsuyo
   keisan
   ninshiki_interfaces
-  gyakuenki_interfaces)
+  gyakuenki_interfaces
+  atama_interfaces)
 
 ament_export_include_directories("include")
 ament_export_libraries(${PROJECT_NAME})

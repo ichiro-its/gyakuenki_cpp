@@ -43,21 +43,38 @@ void IPM::load_config(const std::string & path)
   }
 
   bool valid_config = true;
-  double roll_double;
-  double pitch_double;
-  double yaw_double;
+  double roll_center_double;
+  double pitch_center_double;
+  double yaw_center_double;
+  double roll_side_double;
+  double pitch_side_double;
+  double yaw_side_double;
   double x_double;
   double y_double;
   double z_double;
 
-  nlohmann::json rotation_offset_section;
-  if (jitsuyo::assign_val(config, "rotation_offset", rotation_offset_section)) {
+  nlohmann::json rotation_offset_center_section;
+  if (jitsuyo::assign_val(config, "rotation_offset_center", rotation_offset_center_section)) {
     bool valid_section = true;
-    valid_section &= jitsuyo::assign_val(rotation_offset_section, "roll", roll_double);
-    valid_section &= jitsuyo::assign_val(rotation_offset_section, "pitch", pitch_double);
-    valid_section &= jitsuyo::assign_val(rotation_offset_section, "yaw", yaw_double);
+    valid_section &= jitsuyo::assign_val(rotation_offset_center_section, "roll", roll_center_double);
+    valid_section &= jitsuyo::assign_val(rotation_offset_center_section, "pitch", pitch_center_double);
+    valid_section &= jitsuyo::assign_val(rotation_offset_center_section, "yaw", yaw_center_double);
     if (!valid_section) {
-      std::cout << "Error found at section `rotation_offset`" << std::endl;
+      std::cout << "Error found at section `rotation_offset_center`" << std::endl;
+      valid_config = false;
+    }
+  } else {
+    valid_config = false;
+  }
+
+  nlohmann::json rotation_offset_side_section;
+  if (jitsuyo::assign_val(config, "rotation_offset_side", rotation_offset_side_section)) {
+    bool valid_section = true;
+    valid_section &= jitsuyo::assign_val(rotation_offset_side_section, "roll", roll_side_double);
+    valid_section &= jitsuyo::assign_val(rotation_offset_side_section, "pitch", pitch_side_double);
+    valid_section &= jitsuyo::assign_val(rotation_offset_side_section, "yaw", yaw_side_double);
+    if (!valid_section) {
+      std::cout << "Error found at section `rotation_offset_side`" << std::endl;
       valid_config = false;
     }
   } else {
@@ -90,7 +107,10 @@ void IPM::load_config(const std::string & path)
     std::cerr << "WARN: Error found at section `confidence`, using default values" << std::endl;
   }
 
-  set_config(x_double, y_double, z_double, roll_double, pitch_double, yaw_double);
+  set_config(
+    x_double, y_double, z_double,
+    roll_center_double, pitch_center_double, yaw_center_double,
+    roll_side_double, pitch_side_double, yaw_side_double);
 
   if (!valid_config) {
     throw std::runtime_error("Failed to set configuration file `camera_offset.json`");
@@ -99,27 +119,47 @@ void IPM::load_config(const std::string & path)
   horizon_scale = keisan::clamp(horizon_scale, 15.0, 35.0);
 }
 
-void IPM::set_config(double x, double y, double z, double roll, double pitch, double yaw)
+void IPM::set_config(
+  double x, double y, double z,
+  double roll_center, double pitch_center, double yaw_center,
+  double roll_side, double pitch_side, double yaw_side)
 {
   camera_offset.position.x = x;
   camera_offset.position.y = y;
   camera_offset.position.z = z;
-  camera_offset.roll = keisan::make_degree(roll);
-  camera_offset.pitch = keisan::make_degree(pitch);
-  camera_offset.yaw = keisan::make_degree(yaw);
+  camera_offset.roll_center = keisan::make_degree(roll_center);
+  camera_offset.pitch_center = keisan::make_degree(pitch_center);
+  camera_offset.yaw_center = keisan::make_degree(yaw_center);
+  camera_offset.roll_side = keisan::make_degree(roll_side);
+  camera_offset.pitch_side = keisan::make_degree(pitch_side);
+  camera_offset.yaw_side = keisan::make_degree(yaw_side);
 
   translation_offset.setValue(x, y, z);
-  rotation_offset.setRPY(
-    camera_offset.roll.radian(), camera_offset.pitch.radian(), camera_offset.yaw.radian());
+
+  rotation_offset_center.setRPY(
+    camera_offset.roll_center.radian(),
+    camera_offset.pitch_center.radian(),
+    camera_offset.yaw_center.radian());
+  rotation_offset_center.normalize();
+
+  rotation_offset_side.setRPY(
+    camera_offset.roll_side.radian(),
+    camera_offset.pitch_side.radian(),
+    camera_offset.yaw_side.radian());
+  rotation_offset_side.normalize();
 }
 
 void IPM::save_config()
 {
   nlohmann::json config;
 
-  config["rotation_offset"]["roll"] = camera_offset.roll.degree();
-  config["rotation_offset"]["pitch"] = camera_offset.pitch.degree();
-  config["rotation_offset"]["yaw"] = camera_offset.yaw.degree();
+  config["rotation_offset_center"]["roll"] = camera_offset.roll_center.degree();
+  config["rotation_offset_center"]["pitch"] = camera_offset.pitch_center.degree();
+  config["rotation_offset_center"]["yaw"] = camera_offset.yaw_center.degree();
+
+  config["rotation_offset_side"]["roll"] = camera_offset.roll_side.degree();
+  config["rotation_offset_side"]["pitch"] = camera_offset.pitch_side.degree();
+  config["rotation_offset_side"]["yaw"] = camera_offset.yaw_side.degree();
 
   config["position_offset"]["x"] = camera_offset.position.x;
   config["position_offset"]["y"] = camera_offset.position.y;
@@ -142,8 +182,10 @@ cv::Point2d IPM::get_target_pixel(const DetectedObject & detected_object)
 
   // Goalpost and robot uses bottom-center of bounding box, other object uses center of bounding box
   point.x = detected_object.left + detected_object.right / 2;
-  if (detected_object.label == "goalpost" || detected_object.label == "robot") {
+  if (detected_object.label == "robot") {
     point.y = detected_object.top + detected_object.bottom;
+  } else if (detected_object.label == "goalpost") {
+    point.y = detected_object.top + detected_object.bottom + 2.0;
   } else {
     point.y = detected_object.top + (detected_object.bottom / 2.0);
   }
@@ -226,6 +268,52 @@ keisan::Matrix<4, 1> IPM::point_in_camera_frame(
   return Pc;
 }
 
+// Extract head pan angle (yaw) from TF at the given timestamp
+// by looking up transform from base to head_pan_link
+double IPM::get_head_pan_from_tf(const rclcpp::Time & timestamp)
+{
+  geometry_msgs::msg::TransformStamped t_head;
+  try {
+    if (timestamp.nanoseconds() == 0) {
+      t_head = tf_buffer->lookupTransform(
+        "base_footprint", "neck", tf2::TimePointZero);
+    } else {
+      t_head = tf_buffer->lookupTransform(
+        "base_footprint", "neck", timestamp, tf2::Duration::zero());
+    }
+  } catch (tf2::TransformException &) {
+    try {
+      t_head = tf_buffer->lookupTransform(
+        "base_footprint", "neck", tf2::TimePointZero);
+      RCLCPP_WARN(
+        node->get_logger(),
+        "Head pan TF not available for capture timestamp, using latest TF");
+    } catch (tf2::TransformException & ex) {
+      RCLCPP_WARN(
+        node->get_logger(),
+        "Failed to get head pan from TF: %s. Defaulting to 0.0", ex.what());
+      return 0.0;
+    }
+  }
+
+  // Extract yaw (pan) from the rotation quaternion
+  tf2::Quaternion q_head = msg_to_tf2(t_head.transform.rotation);
+  double roll, pitch, yaw;
+  tf2::Matrix3x3(q_head).getRPY(roll, pitch, yaw);
+
+  return yaw;  // yaw == pan angle in radians
+}
+
+tf2::Quaternion IPM::interpolate_rotation_offset(double pan_rad)
+{
+  double pan_abs = std::abs(pan_rad);
+  double half_pi = M_PI / 2.0;
+
+  double t = std::min(pan_abs / half_pi, 1.0);
+
+  return rotation_offset_center.slerp(rotation_offset_side, t);
+}
+
 // Apply the camera translation and rotation offset to the transform from camera frame
 // to output frame (e. g. base_footprint) and return the corrected transform
 tf2::Transform IPM::get_corrected_camera_transform(
@@ -256,14 +344,23 @@ tf2::Transform IPM::get_corrected_camera_transform(
   tf2::Quaternion q_base_cam = msg_to_tf2(t.transform.rotation);
 
   tf_base_to_cam.setOrigin(
-    tf2::Vector3(t.transform.translation.x, t.transform.translation.y, t.transform.translation.z));
+    tf2::Vector3(
+      t.transform.translation.x,
+      t.transform.translation.y,
+      t.transform.translation.z));
 
   tf_base_to_cam.setRotation(q_base_cam);
+
+  // Get head pan angle from TF (synchronized with the same timestamp)
+  double pan_rad = get_head_pan_from_tf(timestamp);
+
+  // Interpolate rotation offset using TF-derived pan angle
+  tf2::Quaternion q_offset = interpolate_rotation_offset(pan_rad);
 
   // Build offset transform
   tf2::Transform tf_offset;
   tf_offset.setOrigin(translation_offset);
-  tf_offset.setRotation(rotation_offset);
+  tf_offset.setRotation(q_offset);
 
   // Apply offset: T_final = T_base_cam * T_offset
   tf2::Transform tf_final = tf_base_to_cam * tf_offset;

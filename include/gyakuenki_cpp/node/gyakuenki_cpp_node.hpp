@@ -30,6 +30,7 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
+#include "atama_interfaces/msg/head.hpp"
 #include "gyakuenki_cpp/projections/ipm.hpp"
 #include "gyakuenki_interfaces/msg/point3.hpp"
 #include "gyakuenki_interfaces/msg/projected_object.hpp"
@@ -54,6 +55,7 @@ public:
   using ProjectedObject = gyakuenki_interfaces::msg::ProjectedObject;
   using GetCameraOffset = gyakuenki_interfaces::srv::GetCameraOffset;
   using UpdateCameraOffset = gyakuenki_interfaces::srv::UpdateCameraOffset;
+  using Head = atama_interfaces::msg::Head;
 
   void publish(const DetectedObjects::SharedPtr & message);
   void publish_markers(const ProjectedObjects & projected_objects, const rclcpp::Time & stamp);
@@ -72,6 +74,7 @@ private:
   rclcpp::Publisher<ProjectedObject>::SharedPtr projected_ball_publisher;
   rclcpp::Subscription<DetectedObjects>::SharedPtr dnn_detection_subscriber;
   rclcpp::Subscription<DetectedObject>::SharedPtr ball_detection_subscriber;
+  rclcpp::Subscription<Head>::SharedPtr head_subscriber;
 
   rclcpp::Service<GetCameraOffset>::SharedPtr get_camera_offset_service;
   rclcpp::Service<UpdateCameraOffset>::SharedPtr update_camera_offset_service;

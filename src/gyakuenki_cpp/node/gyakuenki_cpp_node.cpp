@@ -29,9 +29,6 @@ GyakuenkiCppNode::GyakuenkiCppNode(
   const std::shared_ptr<rclcpp::Node> & node, const std::string & config_path)
 : node(node)
 {
-  using GetCameraOffset = gyakuenki_interfaces::srv::GetCameraOffset;
-  using UpdateCameraOffset = gyakuenki_interfaces::srv::UpdateCameraOffset;
-
   tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
   tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, false);
 
@@ -46,6 +43,12 @@ GyakuenkiCppNode::GyakuenkiCppNode(
     "ninshiki_cpp/dnn_detection", 10,
     [this](const DetectedObjects::SharedPtr message) { this->publish(message); });
 
+  head_subscriber = node->create_subscription<Head>(
+    "/head/set_head_data", 10,
+    [this](const Head::SharedPtr message) {
+      ipm->head_pan = keisan::make_degree(message->pan_angle);
+    });
+
   // Camera Offset Services
   get_camera_offset_service = node->create_service<GetCameraOffset>(
     "camera/get_camera_offset", [this, config_path](
@@ -57,9 +60,13 @@ GyakuenkiCppNode::GyakuenkiCppNode(
       response->position_y = camera_offset.position.y;
       response->position_z = camera_offset.position.z;
 
-      response->roll = camera_offset.roll.degree();
-      response->pitch = camera_offset.pitch.degree();
-      response->yaw = camera_offset.yaw.degree();
+      response->roll_center = camera_offset.roll_center.degree();
+      response->pitch_center = camera_offset.pitch_center.degree();
+      response->yaw_center = camera_offset.yaw_center.degree();
+
+      response->roll_side = camera_offset.roll_side.degree();
+      response->pitch_side = camera_offset.pitch_side.degree();
+      response->yaw_side = camera_offset.yaw_side.degree();
 
       response->status = true;
     });
@@ -69,8 +76,9 @@ GyakuenkiCppNode::GyakuenkiCppNode(
                                      const UpdateCameraOffset::Request::SharedPtr request,
                                      UpdateCameraOffset::Response::SharedPtr response) {
       this->ipm->set_config(
-        request->position_x, request->position_y, request->position_z, request->roll,
-        request->pitch, request->yaw);
+        request->position_x, request->position_y, request->position_z,
+        request->roll_center, request->pitch_center, request->yaw_center,
+        request->roll_side, request->pitch_side, request->yaw_side);
 
       if (request->save) {
         this->ipm->save_config();
