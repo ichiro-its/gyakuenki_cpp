@@ -301,15 +301,15 @@ double IPM::get_head_pan_from_tf(const rclcpp::Time & timestamp)
   double roll, pitch, yaw;
   tf2::Matrix3x3(q_head).getRPY(roll, pitch, yaw);
 
-  return yaw;  // yaw == pan angle in radians
+  return yaw;
 }
 
 tf2::Quaternion IPM::interpolate_rotation_offset(double pan_rad)
 {
   double pan_abs = std::abs(pan_rad);
-  double half_pi = M_PI / 2.0;
 
-  double t = std::min(pan_abs / half_pi, 1.0);
+  double x = std::clamp(pan_abs / (M_PI * 0.5), 0.0, 1.0);
+  double t = std::pow(x, 3.0);
 
   return rotation_offset_center.slerp(rotation_offset_side, t);
 }
@@ -344,14 +344,11 @@ tf2::Transform IPM::get_corrected_camera_transform(
   tf2::Quaternion q_base_cam = msg_to_tf2(t.transform.rotation);
 
   tf_base_to_cam.setOrigin(
-    tf2::Vector3(
-      t.transform.translation.x,
-      t.transform.translation.y,
-      t.transform.translation.z));
+    tf2::Vector3(t.transform.translation.x, t.transform.translation.y, t.transform.translation.z));
 
   tf_base_to_cam.setRotation(q_base_cam);
 
-  // Get head pan angle from TF (synchronized with the same timestamp)
+  // Get head pan angle from TF synchronized with the same timestamp
   double pan_rad = get_head_pan_from_tf(timestamp);
 
   // Interpolate rotation offset using TF-derived pan angle
