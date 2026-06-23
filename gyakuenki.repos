@@ -1,0 +1,17 @@
+repositories:
+  jitsuyo:
+    type: git
+    url: https://github.com/ichiro-its/jitsuyo.git
+    version: enhancement/nlohmann-dependency
+
+  keisan:
+    type: git
+    url: https://github.com/ichiro-its/keisan.git
+
+  ninshiki_interfaces:
+    type: git
+    url: https://github.com/ichiro-its/ninshiki_interfaces.git
+
+  gyakuenki_interfaces:
+    type: git
+    url: https://github.com/ichiro-its/gyakuenki_interfaces.git
